@@ -70,7 +70,7 @@ jobs:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_DB_URL:  ${{ secrets.FIREBASE_DB_URL }}
         run: |
-          flet build apk \
+          yes | flet build apk \
             --project "LudoProMax" \
             --product "Ludo Pro Max" \
             --org "com.ludopromax" \

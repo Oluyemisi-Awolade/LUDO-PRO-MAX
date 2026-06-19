@@ -1,1 +1,8 @@
 aiohttp
+certifi
+aiosignal
+frozenlist
+multidict
+yarl
+attrs
+

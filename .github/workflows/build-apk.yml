@@ -3,7 +3,7 @@ name: Build Ludo Pro Max APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:   # lets you trigger manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build-apk:
@@ -11,11 +11,9 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Python ────────────────────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -24,43 +22,37 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flet==0.24.1 aiohttp
+          pip install "flet==0.84.0" aiohttp
 
-      # ── 3. Java (required by Android SDK / Gradle) ───────────────────
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # ── 4. Flutter ───────────────────────────────────────────────────
-      - name: Set up Flutter
+      - name: Set up Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.2"
+          flutter-version: "3.24.5"
           channel: stable
           cache: true
 
-      # ── 5. Android SDK command-line tools ────────────────────────────
-      - name: Install Android SDK
+      - name: Install Android SDK command-line tools
         run: |
           sudo apt-get update -q
           sudo apt-get install -y wget unzip
-
           SDK_DIR="$HOME/android-sdk"
           mkdir -p "$SDK_DIR/cmdline-tools"
-
           wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
                -O /tmp/cmdtools.zip
           unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools_extract
           mv /tmp/cmdtools_extract/cmdline-tools "$SDK_DIR/cmdline-tools/latest"
+          echo "ANDROID_HOME=$SDK_DIR"             >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_DIR"         >> $GITHUB_ENV
+          echo "$SDK_DIR/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$SDK_DIR/platform-tools"           >> $GITHUB_PATH
 
-          echo "ANDROID_HOME=$SDK_DIR"              >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$SDK_DIR"          >> $GITHUB_ENV
-          echo "$SDK_DIR/cmdline-tools/latest/bin"  >> $GITHUB_PATH
-          echo "$SDK_DIR/platform-tools"            >> $GITHUB_PATH
-
-      - name: Accept Android licenses & install build tools
+      - name: Accept Android licenses and install build tools
         run: |
           yes | sdkmanager --licenses
           sdkmanager \
@@ -68,29 +60,25 @@ jobs:
             "platforms;android-34" \
             "build-tools;34.0.0"
 
-      # ── 6. Build APK ─────────────────────────────────────────────────
-      - name: Build APK with flet build
+      - name: Build APK
         env:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_DB_URL:  ${{ secrets.FIREBASE_DB_URL }}
         run: |
           flet build apk \
-            --project "Ludo Pro Max" \
+            --project "LudoProMax" \
             --product "Ludo Pro Max" \
             --org "com.ludopromax" \
             --build-version "2.0.0" \
             --build-number ${{ github.run_number }}
 
-      # ── 7. Upload APK as artifact ─────────────────────────────────────
-      - name: Upload APK
+      - name: Find APK
+        run: find . -name "*.apk" 2>/dev/null || echo "No APK found"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ludo-pro-max-apk
-          path: build/apk/app-release.apk
+          path: "**/*.apk"
+          if-no-files-found: warn
           retention-days: 30
-
-      # ── 8. Print download hint ────────────────────────────────────────
-      - name: Done
-        run: |
-          echo "✅ APK built successfully!"
-          echo "Download it from the Actions tab → this run → Artifacts section."

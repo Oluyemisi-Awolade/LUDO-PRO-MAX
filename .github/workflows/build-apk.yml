@@ -30,10 +30,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter 3.24.5
+      - name: Set up Flutter 3.41.4
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.5"
+          flutter-version: "3.41.4"
           channel: stable
           cache: true
 
@@ -59,6 +59,11 @@ jobs:
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;34.0.0"
+
+      - name: Disable Flutter analytics and accept Flutter licenses
+        run: |
+          flutter config --no-analytics
+          yes | flutter doctor --android-licenses || true
 
       - name: Build APK
         env:

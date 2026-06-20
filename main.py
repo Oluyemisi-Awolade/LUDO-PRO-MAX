@@ -16,7 +16,7 @@ from datetime import date, datetime
 FIREBASE_API_KEY   = os.environ.get('FIREBASE_API_KEY', '')
 FIREBASE_DB_URL    = os.environ.get('FIREBASE_DB_URL', '')
 FIREBASE_AUTH_URL  = "https://identitytoolkit.googleapis.com/v1/accounts"
-OFFLINE_FILE       = "ludo_save.json"   # fixed: was /content/ludo_save.json
+OFFLINE_FILE       = "ludo_save.json"
 FLUTTERWAVE_URL    = "https://flutterwave.com/pay/ou2066snurqa"
 MAX_ADS_PER_DAY    = 5
 APP_VERSION        = "2.0.0"
@@ -585,9 +585,9 @@ async def main(page: ft.Page):
         board_col.controls.clear()
         cell_size = 26
 
-        for row_idx in range(BOARD_SIZE):          # fixed: renamed loop var from `r` to `row_idx`
+        for row_idx in range(BOARD_SIZE):
             row = ft.Row(spacing=1, alignment=ft.MainAxisAlignment.CENTER)
-            for col_idx in range(BOARD_SIZE):      # fixed: renamed loop var from `c` to `col_idx`
+            for col_idx in range(BOARD_SIZE):
                 bg   = "#2d2d44"
                 text = ""
                 border = ft.border.all(0.4, "#44446a")
@@ -619,7 +619,7 @@ async def main(page: ft.Page):
 
                 if len(tokens_here) == 1:
                     pi, ti = tokens_here[0]
-                    rad = (cell_size - 6) // 2      # fixed: was `r`, clashed with outer loop
+                    rad = (cell_size - 6) // 2
                     cell_content = ft.Container(
                         width=cell_size-6, height=cell_size-6,
                         border_radius=ft.BorderRadius(rad, rad, rad, rad),
@@ -1528,16 +1528,8 @@ async def main(page: ft.Page):
             page.add(login_view())
         page.update()
 
-    async def on_connect(e):
-        page.bgcolor = "#1a1a2e"
-        page.clean()
-        page.add(login_view())
-        page.update()
-
     page.on_route_change = route_change
-    page.on_connect      = on_connect
     page.bgcolor         = "#1a1a2e"
-    page.clean()
     page.add(login_view())
     page.update()
 

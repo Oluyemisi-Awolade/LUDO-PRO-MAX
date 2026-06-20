@@ -75,8 +75,7 @@ jobs:
             --product "Ludo Pro Max" \
             --org "com.ludopromax" \
             --build-version "2.0.0" \
-            --build-number ${{ github.run_number }} \
-            --icon icon.png
+            --build-number ${{ github.run_number }}
 
       - name: Find APK
         run: find . -name "*.apk" 2>/dev/null || echo "No APK found"

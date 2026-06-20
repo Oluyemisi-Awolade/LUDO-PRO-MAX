@@ -68,6 +68,7 @@ jobs:
       - name: Create requirements for bundling
         run: |
           cat > requirements.txt << 'EOF'
+          flet==0.84.0
           aiohttp
           certifi
           aiosignal

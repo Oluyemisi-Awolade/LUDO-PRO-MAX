@@ -108,13 +108,10 @@ def new_elo(ra, rb, won):
 # MAIN APP
 # ─────────────────────────────────────────────
 async def main(page: ft.Page):
-    page.title                  = "Ludo Pro Max"
-    page.theme_mode             = ft.ThemeMode.DARK
-    page.bgcolor                = "#1a1a2e"
-    page.padding                = 0
-    page.scroll                 = ft.ScrollMode.AUTO
-    page.vertical_alignment     = ft.MainAxisAlignment.START
-    page.horizontal_alignment   = ft.CrossAxisAlignment.CENTER
+    page.title        = "Ludo Pro Max"
+    page.theme_mode   = ft.ThemeMode.DARK
+    page.bgcolor      = "#1a1a2e"
+    page.padding      = 0
     page.update()
 
     # ── SOUND SYSTEM ─────────────────────────
@@ -128,24 +125,6 @@ async def main(page: ft.Page):
         "bgm":     "https://cdn.freesound.org/previews/612/612598_5674468-lq.mp3",
     }
 
-    SILENT_MP3_B64 = (
-        "//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    )
-    SOUND_DIR = "sounds"
-    os.makedirs(SOUND_DIR, exist_ok=True)
-
-    def create_silent_files():
-        import base64
-        for name in SOUNDS:
-            path = f"{SOUND_DIR}/{name}.mp3"
-            if not os.path.exists(path):
-                try:
-                    with open(path, "wb") as f:
-                        f.write(base64.b64decode(SILENT_MP3_B64))
-                except: pass
-
-    create_silent_files()
-
     _audio_players = {}
     _sound_enabled = {"value": True}
     _music_enabled = {"value": True}
@@ -157,7 +136,6 @@ async def main(page: ft.Page):
                 autoplay=False,
                 volume=0.8 if key != "bgm" else 0.3,
                 balance=0,
-                on_loaded=None,
             )
             if loop:
                 player.release_mode = ft.ReleaseMode.LOOP
@@ -232,8 +210,9 @@ async def main(page: ft.Page):
     # ── PERSISTENT UI WIDGETS ──────────────────
     dice1_text   = ft.Text("⚀", size=52, weight=ft.FontWeight.BOLD)
     dice2_text   = ft.Text("⚀", size=52, weight=ft.FontWeight.BOLD)
-    roll_btn     = ft.Button(
-        "Roll Dice", icon=ft.Icons.CASINO,
+    roll_btn     = ft.ElevatedButton(
+        "Roll Dice",
+        icon=ft.Icons.CASINO,
         style=ft.ButtonStyle(
             shape=ft.RoundedRectangleBorder(radius=12),
             bgcolor=ft.Colors.PURPLE_700,
@@ -260,7 +239,10 @@ async def main(page: ft.Page):
             bgcolor=color, duration=2500
         )
         page.snack_bar.open = True
-        page.update()
+        try:
+            page.update()
+        except:
+            pass
 
     # ── OFFLINE SAVE / LOAD ───────────────────
     def save_offline():
@@ -583,7 +565,7 @@ async def main(page: ft.Page):
     # ── BOARD BUILDER ─────────────────────────
     def build_board():
         board_col.controls.clear()
-        cell_size = 26
+        cell_size = 24
 
         for row_idx in range(BOARD_SIZE):
             row = ft.Row(spacing=1, alignment=ft.MainAxisAlignment.CENTER)
@@ -871,7 +853,7 @@ async def main(page: ft.Page):
         dice2_text.value = "⚀"
 
     # ─────────────────────────────────────────
-    # VIEWS
+    # HELPER WIDGETS
     # ─────────────────────────────────────────
 
     def header(title):
@@ -880,12 +862,12 @@ async def main(page: ft.Page):
                 ft.Text("🎲", size=22),
                 ft.Text(title, size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
             ], spacing=8),
-            bgcolor="#12122a", padding=ft.Padding(left=20, right=20, top=14, bottom=14),
-            border_radius=ft.BorderRadius(0, 0, 0, 0)
+            bgcolor="#12122a",
+            padding=ft.Padding(left=20, right=20, top=14, bottom=14),
         )
 
     def primary_btn(text, on_click, icon=None, color=ft.Colors.PURPLE_700, width=300):
-        return ft.Button(
+        return ft.ElevatedButton(
             text, icon=icon, on_click=on_click, width=width,
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=12),
@@ -925,7 +907,7 @@ async def main(page: ft.Page):
                     size=12, color=ft.Colors.WHITE70
                 ),
                 thanked,
-                ft.Button(
+                ft.ElevatedButton(
                     "☕ Buy a Coffee — Support Us",
                     icon=ft.Icons.FAVORITE,
                     on_click=on_support,
@@ -955,7 +937,7 @@ async def main(page: ft.Page):
                     else len(gs["finished_players"]))
         coins_won = coin_rewards[min(my_place, 3)]
 
-        async def rematch():
+        async def rematch(e):
             page.close(dialog)
             setup_game(
                 len(gs["players"]),
@@ -963,12 +945,12 @@ async def main(page: ft.Page):
                 gs["bot_difficulty"],
                 gs["two_dice_mode"]
             )
-            await page.push_route("/game")
+            page.go("/game")
 
-        async def go_menu():
+        async def go_menu(e):
             page.close(dialog)
             gs["stop_poll"] = True
-            await page.push_route("/menu")
+            page.go("/menu")
 
         dialog = ft.AlertDialog(
             modal=True,
@@ -994,17 +976,17 @@ async def main(page: ft.Page):
                 support_card(),
                 ft.Divider(color="#44446a"),
                 ft.Row([
-                    ft.Button(
+                    ft.ElevatedButton(
                         "Play Again", icon=ft.Icons.REPLAY,
-                        on_click=lambda e: page.run_task(rematch),
+                        on_click=lambda e: page.run_task(rematch, e),
                         style=ft.ButtonStyle(
                             shape=ft.RoundedRectangleBorder(radius=10),
                             bgcolor=ft.Colors.PURPLE_700, color=ft.Colors.WHITE
                         )
                     ),
-                    ft.Button(
+                    ft.ElevatedButton(
                         "Menu", icon=ft.Icons.HOME,
-                        on_click=lambda e: page.run_task(go_menu),
+                        on_click=lambda e: page.run_task(go_menu, e),
                         style=ft.ButtonStyle(
                             shape=ft.RoundedRectangleBorder(radius=10),
                             bgcolor=ft.Colors.GREY_700, color=ft.Colors.WHITE
@@ -1018,16 +1000,24 @@ async def main(page: ft.Page):
         page.open(dialog)
         page.update()
 
+    # ─────────────────────────────────────────
+    # VIEWS — all return ft.View objects
+    # ─────────────────────────────────────────
+
     # ── LOGIN VIEW ────────────────────────────
     def login_view():
-        email_f    = ft.TextField(label="Email", width=300, bgcolor="#2d2d44",
-                                   border_radius=10, color=ft.Colors.WHITE,
-                                   label_style=ft.TextStyle(color=ft.Colors.WHITE54))
-        password_f = ft.TextField(label="Password", password=True, can_reveal_password=True,
-                                   width=300, bgcolor="#2d2d44", border_radius=10,
-                                   color=ft.Colors.WHITE,
-                                   label_style=ft.TextStyle(color=ft.Colors.WHITE54))
-        loading    = ft.ProgressRing(visible=False, width=24, height=24)
+        email_f    = ft.TextField(
+            label="Email", width=300, bgcolor="#2d2d44",
+            border_radius=10, color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.WHITE54)
+        )
+        password_f = ft.TextField(
+            label="Password", password=True, can_reveal_password=True,
+            width=300, bgcolor="#2d2d44", border_radius=10,
+            color=ft.Colors.WHITE,
+            label_style=ft.TextStyle(color=ft.Colors.WHITE54)
+        )
+        loading = ft.ProgressRing(visible=False, width=24, height=24)
 
         async def do_auth(signup):
             if not email_f.value or not password_f.value:
@@ -1038,11 +1028,11 @@ async def main(page: ft.Page):
             try:
                 user = await fb_auth(email_f.value, password_f.value, signup=signup)
                 if "error" in user:
-                    snack(user["error"].get("message","Auth failed"), ft.Colors.RED_700)
+                    snack(user["error"].get("message", "Auth failed"), ft.Colors.RED_700)
                 else:
                     gs["user"] = user
                     await init_user(user["localId"], email_f.value)
-                    await page.push_route("/menu")
+                    page.go("/menu")
             except Exception as ex:
                 snack(str(ex), ft.Colors.RED_700)
             loading.visible = False
@@ -1050,9 +1040,9 @@ async def main(page: ft.Page):
 
         async def offline_play(e):
             if load_offline() and gs["user_data"]:
-                await page.push_route("/menu")
+                page.go("/menu")
             else:
-                gs["user"]      = {"localId": "offline", "idToken": ""}
+                gs["user"] = {"localId": "offline", "idToken": ""}
                 gs["user_data"] = {
                     "email": "Offline Player", "display_name": "Player",
                     "coins": 500, "wins": 0, "losses": 0, "games": 0,
@@ -1060,30 +1050,62 @@ async def main(page: ft.Page):
                     "skins": {"board": "classic", "dice": "default"},
                     "ads": {"date": "", "count": 0}, "achievements": []
                 }
-                await page.push_route("/menu")
+                page.go("/menu")
 
-        return ft.View("/", [
-            ft.Container(expand=True, content=ft.Column([
-                ft.Container(height=40),
-                ft.Text("🎲", size=64, text_align=ft.TextAlign.CENTER),
-                ft.Text("Ludo Pro Max", size=32, weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.WHITE, text_align=ft.TextAlign.CENTER),
-                ft.Text(f"v{APP_VERSION}", size=12, color=ft.Colors.WHITE38,
-                        text_align=ft.TextAlign.CENTER),
-                ft.Container(height=30),
-                email_f, password_f,
-                ft.Container(height=8),
-                loading,
-                primary_btn("Login", lambda e: page.run_task(do_auth, False),
-                            icon=ft.Icons.LOGIN),
-                primary_btn("Create Account", lambda e: page.run_task(do_auth, True),
-                            icon=ft.Icons.PERSON_ADD, color=ft.Colors.INDIGO_700),
-                ft.Button("Play Offline", on_click=offline_play,
-                               style=ft.ButtonStyle(color=ft.Colors.WHITE54)),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-               alignment=ft.MainAxisAlignment.CENTER, spacing=12),
-            padding=24, bgcolor="#1a1a2e")
-        ], bgcolor="#1a1a2e", padding=0)
+        return ft.View(
+            "/",
+            controls=[
+                ft.Container(
+                    expand=True,
+                    bgcolor="#1a1a2e",
+                    padding=24,
+                    content=ft.Column(
+                        controls=[
+                            ft.Container(height=40),
+                            ft.Text("🎲", size=64, text_align=ft.TextAlign.CENTER),
+                            ft.Text(
+                                "Ludo Pro Max", size=32,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.WHITE,
+                                text_align=ft.TextAlign.CENTER
+                            ),
+                            ft.Text(
+                                f"v{APP_VERSION}", size=12,
+                                color=ft.Colors.WHITE38,
+                                text_align=ft.TextAlign.CENTER
+                            ),
+                            ft.Container(height=24),
+                            email_f,
+                            password_f,
+                            ft.Container(height=8),
+                            loading,
+                            primary_btn(
+                                "Login",
+                                lambda e: page.run_task(do_auth, False),
+                                icon=ft.Icons.LOGIN
+                            ),
+                            primary_btn(
+                                "Create Account",
+                                lambda e: page.run_task(do_auth, True),
+                                icon=ft.Icons.PERSON_ADD,
+                                color=ft.Colors.INDIGO_700
+                            ),
+                            ft.TextButton(
+                                "Play Offline",
+                                on_click=lambda e: page.run_task(offline_play, e),
+                                style=ft.ButtonStyle(color=ft.Colors.WHITE54)
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        alignment=ft.MainAxisAlignment.START,
+                        spacing=12,
+                        scroll=ft.ScrollMode.AUTO,
+                    )
+                )
+            ],
+            bgcolor="#1a1a2e",
+            padding=0,
+        )
 
     # ── MENU VIEW ─────────────────────────────
     def menu_view():
@@ -1091,106 +1113,122 @@ async def main(page: ft.Page):
 
         async def go_bot(diff, two=False):
             setup_game(4, "bot", diff, two_dice=two)
-            await page.push_route("/game")
+            page.go("/game")
 
         async def go_local(n):
             setup_game(n, "local", two_dice=False)
-            await page.push_route("/game")
+            page.go("/game")
 
         async def go_online(e):
             if not gs["user"] or gs["user"]["localId"] == "offline":
                 snack("Login to play online", ft.Colors.RED_700)
                 return
-            await page.push_route("/lobby")
+            page.go("/lobby")
 
         async def go_tournament(e):
             if not gs["user"] or gs["user"]["localId"] == "offline":
                 snack("Login to join tournaments", ft.Colors.RED_700)
                 return
-            await page.push_route("/tournament")
+            page.go("/tournament")
 
         async def go_leaderboard(e):
-            await page.push_route("/leaderboard")
+            page.go("/leaderboard")
 
-        return ft.View("/menu", [
-            header("Ludo Pro Max"),
-            ft.Container(
-                ft.Column([
-                    ft.Container(
-                        ft.Row([
-                            ft.CircleAvatar(
-                                content=ft.Text(
-                                    ud.get("display_name","P")[0].upper(),
-                                    size=20, weight=ft.FontWeight.BOLD,
-                                    color=ft.Colors.WHITE
-                                ),
-                                bgcolor=ft.Colors.PURPLE_700, radius=26
+        return ft.View(
+            "/menu",
+            controls=[
+                header("Ludo Pro Max"),
+                ft.Container(
+                    expand=True,
+                    bgcolor="#1a1a2e",
+                    padding=16,
+                    content=ft.Column(
+                        controls=[
+                            ft.Container(
+                                ft.Row([
+                                    ft.CircleAvatar(
+                                        content=ft.Text(
+                                            ud.get("display_name", "P")[0].upper(),
+                                            size=20, weight=ft.FontWeight.BOLD,
+                                            color=ft.Colors.WHITE
+                                        ),
+                                        bgcolor=ft.Colors.PURPLE_700, radius=26
+                                    ),
+                                    ft.Column([
+                                        ft.Text(
+                                            ud.get("display_name", "Player"),
+                                            size=15, weight=ft.FontWeight.BOLD,
+                                            color=ft.Colors.WHITE
+                                        ),
+                                        ft.Text(
+                                            f"🪙 {ud.get('coins', 0)}  |  "
+                                            f"🏆 {ud.get('wins', 0)} wins  |  "
+                                            f"📊 ELO {ud.get('elo', DEFAULT_ELO)}",
+                                            size=11, color=ft.Colors.WHITE70
+                                        )
+                                    ], spacing=2, expand=True)
+                                ], spacing=12),
+                                bgcolor="#2d2d44", padding=14, border_radius=12
                             ),
-                            ft.Column([
-                                ft.Text(ud.get("display_name","Player"),
-                                        size=15, weight=ft.FontWeight.BOLD,
-                                        color=ft.Colors.WHITE),
-                                ft.Text(
-                                    f"🪙 {ud.get('coins',0)}  |  🏆 {ud.get('wins',0)} wins  |  📊 ELO {ud.get('elo',DEFAULT_ELO)}",
-                                    size=11, color=ft.Colors.WHITE70
-                                )
-                            ], spacing=2, expand=True)
-                        ], spacing=12),
-                        bgcolor="#2d2d44", padding=14, border_radius=12
-                    ),
-                    ft.Divider(color="#44446a"),
-                    ft.Text("🤖 VS AI", size=14, weight=ft.FontWeight.BOLD,
-                            color=ft.Colors.WHITE70),
-                    primary_btn("Easy Bot 😊",
-                                lambda e: page.run_task(go_bot, "easy"),
-                                color=ft.Colors.GREEN_700),
-                    primary_btn("Hard Bot 😤",
-                                lambda e: page.run_task(go_bot, "hard"),
-                                color=ft.Colors.ORANGE_700),
-                    primary_btn("Hardest Bot 💀",
-                                lambda e: page.run_task(go_bot, "hardest"),
-                                color=ft.Colors.RED_700),
-                    primary_btn("2-Dice vs Bot 🎲🎲",
-                                lambda e: page.run_task(go_bot, "hard", True),
-                                color=ft.Colors.DEEP_PURPLE_700),
-                    ft.Divider(color="#44446a"),
-                    ft.Text("👥 Local Play", size=14, weight=ft.FontWeight.BOLD,
-                            color=ft.Colors.WHITE70),
-                    ft.Row([
-                        primary_btn("2P", lambda e: page.run_task(go_local, 2),
-                                    width=90, color=ft.Colors.BLUE_700),
-                        primary_btn("3P", lambda e: page.run_task(go_local, 3),
-                                    width=90, color=ft.Colors.TEAL_700),
-                        primary_btn("4P", lambda e: page.run_task(go_local, 4),
-                                    width=90, color=ft.Colors.INDIGO_700),
-                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-                    ft.Divider(color="#44446a"),
-                    ft.Text("🌐 Online", size=14, weight=ft.FontWeight.BOLD,
-                            color=ft.Colors.WHITE70),
-                    primary_btn("Online Multiplayer 🌍", go_online,
-                                icon=ft.Icons.WIFI, color=ft.Colors.CYAN_700),
-                    primary_btn("Tournaments 🏆", go_tournament,
-                                icon=ft.Icons.EMOJI_EVENTS, color=ft.Colors.AMBER_700),
-                    primary_btn("Leaderboard 📊", go_leaderboard,
-                                icon=ft.Icons.LEADERBOARD, color=ft.Colors.PINK_700),
-                    ft.Divider(color="#44446a"),
-                    support_card(),
-                    ft.Button(
-                        "Logout",
-                        on_click=lambda e: page.run_task(page.push_route, "/"),
-                        style=ft.ButtonStyle(color=ft.Colors.WHITE38)
+                            ft.Divider(color="#44446a"),
+                            ft.Text("🤖 VS AI", size=14, weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.WHITE70),
+                            primary_btn("Easy Bot 😊",
+                                        lambda e: page.run_task(go_bot, "easy"),
+                                        color=ft.Colors.GREEN_700),
+                            primary_btn("Hard Bot 😤",
+                                        lambda e: page.run_task(go_bot, "hard"),
+                                        color=ft.Colors.ORANGE_700),
+                            primary_btn("Hardest Bot 💀",
+                                        lambda e: page.run_task(go_bot, "hardest"),
+                                        color=ft.Colors.RED_700),
+                            primary_btn("2-Dice vs Bot 🎲🎲",
+                                        lambda e: page.run_task(go_bot, "hard", True),
+                                        color=ft.Colors.DEEP_PURPLE_700),
+                            ft.Divider(color="#44446a"),
+                            ft.Text("👥 Local Play", size=14, weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.WHITE70),
+                            ft.Row([
+                                primary_btn("2P", lambda e: page.run_task(go_local, 2),
+                                            width=90, color=ft.Colors.BLUE_700),
+                                primary_btn("3P", lambda e: page.run_task(go_local, 3),
+                                            width=90, color=ft.Colors.TEAL_700),
+                                primary_btn("4P", lambda e: page.run_task(go_local, 4),
+                                            width=90, color=ft.Colors.INDIGO_700),
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+                            ft.Divider(color="#44446a"),
+                            ft.Text("🌐 Online", size=14, weight=ft.FontWeight.BOLD,
+                                    color=ft.Colors.WHITE70),
+                            primary_btn("Online Multiplayer 🌍", go_online,
+                                        icon=ft.Icons.WIFI, color=ft.Colors.CYAN_700),
+                            primary_btn("Tournaments 🏆", go_tournament,
+                                        icon=ft.Icons.EMOJI_EVENTS, color=ft.Colors.AMBER_700),
+                            primary_btn("Leaderboard 📊", go_leaderboard,
+                                        icon=ft.Icons.LEADERBOARD, color=ft.Colors.PINK_700),
+                            ft.Divider(color="#44446a"),
+                            support_card(),
+                            ft.TextButton(
+                                "Logout",
+                                on_click=lambda e: page.go("/"),
+                                style=ft.ButtonStyle(color=ft.Colors.WHITE38)
+                            )
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=10,
+                        scroll=ft.ScrollMode.AUTO,
                     )
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                   spacing=10, scroll=ft.ScrollMode.AUTO),
-                padding=16, expand=True, bgcolor="#1a1a2e"
-            )
-        ], bgcolor="#1a1a2e", padding=0, scroll=ft.ScrollMode.AUTO)
+                )
+            ],
+            bgcolor="#1a1a2e",
+            padding=0,
+        )
 
     # ── LOBBY VIEW ────────────────────────────
     def lobby_view():
         code_field = ft.TextField(
             label="Enter Room Code", width=200, bgcolor="#2d2d44",
-            border_radius=10, color=ft.Colors.WHITE, text_align=ft.TextAlign.CENTER,
+            border_radius=10, color=ft.Colors.WHITE,
+            text_align=ft.TextAlign.CENTER,
             label_style=ft.TextStyle(color=ft.Colors.WHITE54)
         )
         result_text = ft.Text("", color=ft.Colors.WHITE70, size=13)
@@ -1199,7 +1237,7 @@ async def main(page: ft.Page):
             code = await create_room(two_dice=two_dice)
             result_text.value = f"Room created! Code: {code}"
             page.update()
-            await page.push_route("/game")
+            page.go("/game")
 
         async def do_join(e):
             code = code_field.value.strip()
@@ -1208,44 +1246,65 @@ async def main(page: ft.Page):
                 return
             ok, msg = await join_room(code)
             if ok:
-                await page.push_route("/game")
+                page.go("/game")
             else:
                 snack(msg, ft.Colors.RED_700)
 
-        return ft.View("/lobby", [
-            header("Online Lobby"),
-            ft.Container(
-                ft.Column([
-                    ft.Text("Create a new room and share the code with friends",
-                            size=13, color=ft.Colors.WHITE70,
-                            text_align=ft.TextAlign.CENTER),
-                    primary_btn("Create Room (1 Dice)",
+        return ft.View(
+            "/lobby",
+            controls=[
+                header("Online Lobby"),
+                ft.Container(
+                    expand=True,
+                    bgcolor="#1a1a2e",
+                    padding=20,
+                    content=ft.Column(
+                        controls=[
+                            ft.Text(
+                                "Create a new room and share the code with friends",
+                                size=13, color=ft.Colors.WHITE70,
+                                text_align=ft.TextAlign.CENTER
+                            ),
+                            primary_btn(
+                                "Create Room (1 Dice)",
                                 lambda e: page.run_task(do_create, False),
-                                icon=ft.Icons.ADD_CIRCLE, color=ft.Colors.GREEN_700),
-                    primary_btn("Create Room (2 Dice 🎲🎲)",
+                                icon=ft.Icons.ADD_CIRCLE, color=ft.Colors.GREEN_700
+                            ),
+                            primary_btn(
+                                "Create Room (2 Dice 🎲🎲)",
                                 lambda e: page.run_task(do_create, True),
-                                icon=ft.Icons.ADD_CIRCLE, color=ft.Colors.DEEP_PURPLE_700),
-                    ft.Divider(color="#44446a"),
-                    ft.Text("Or join an existing room", size=13, color=ft.Colors.WHITE70),
-                    ft.Row([
-                        code_field,
-                        ft.Button(
-                            "Join", on_click=do_join,
-                            style=ft.ButtonStyle(
-                                shape=ft.RoundedRectangleBorder(radius=10),
-                                bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE
+                                icon=ft.Icons.ADD_CIRCLE, color=ft.Colors.DEEP_PURPLE_700
+                            ),
+                            ft.Divider(color="#44446a"),
+                            ft.Text("Or join an existing room", size=13,
+                                    color=ft.Colors.WHITE70),
+                            ft.Row([
+                                code_field,
+                                ft.ElevatedButton(
+                                    "Join", on_click=do_join,
+                                    style=ft.ButtonStyle(
+                                        shape=ft.RoundedRectangleBorder(radius=10),
+                                        bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE
+                                    )
+                                )
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
+                            result_text,
+                            ft.Divider(color="#44446a"),
+                            primary_btn(
+                                "← Back",
+                                lambda e: page.go("/menu"),
+                                color=ft.Colors.GREY_700
                             )
-                        )
-                    ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
-                    result_text,
-                    ft.Divider(color="#44446a"),
-                    primary_btn("← Back", lambda e: page.run_task(page.push_route, "/menu"),
-                                color=ft.Colors.GREY_700)
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                   spacing=12, alignment=ft.MainAxisAlignment.CENTER),
-                padding=20, expand=True, bgcolor="#1a1a2e"
-            )
-        ], bgcolor="#1a1a2e", padding=0)
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=12,
+                        scroll=ft.ScrollMode.AUTO,
+                    )
+                )
+            ],
+            bgcolor="#1a1a2e",
+            padding=0,
+        )
 
     # ── GAME VIEW ─────────────────────────────
     def game_view():
@@ -1255,8 +1314,9 @@ async def main(page: ft.Page):
         emote_row.controls.clear()
         for em in EMOTES:
             emote_row.controls.append(
-                ft.Button(
-                    em, on_click=lambda e, em=em: page.run_task(send_emote, em),
+                ft.ElevatedButton(
+                    em,
+                    on_click=lambda e, em=em: page.run_task(send_emote, em),
                     style=ft.ButtonStyle(
                         shape=ft.RoundedRectangleBorder(radius=8),
                         bgcolor="#2d2d44", color=ft.Colors.WHITE,
@@ -1265,17 +1325,22 @@ async def main(page: ft.Page):
                 )
             )
 
-        dice_row = ft.Row([dice1_text], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
-        if gs["two_dice_mode"]:
-            dice_row.controls.append(dice2_text)
+        dice_row = ft.Row(
+            [dice1_text] + ([dice2_text] if gs["two_dice_mode"] else []),
+            alignment=ft.MainAxisAlignment.CENTER, spacing=8
+        )
 
         chat_ui = ft.Column([
-            ft.Text("💬 Chat", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE70),
+            ft.Text("💬 Chat", size=12, weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE70),
             chat_list,
             ft.Row([
                 chat_field,
-                ft.Button(ft.Icons.SEND, icon_color=ft.Colors.PURPLE_300,
-                              on_click=lambda e: page.run_task(send_chat, e))
+                ft.IconButton(
+                    icon=ft.Icons.SEND,
+                    icon_color=ft.Colors.PURPLE_300,
+                    on_click=lambda e: page.run_task(send_chat, e)
+                )
             ], spacing=6)
         ], spacing=4) if gs["is_online"] else ft.Container()
 
@@ -1283,72 +1348,83 @@ async def main(page: ft.Page):
             gs["stop_poll"] = True
             gs["game_started"] = False
             await stop_bgm()
-            await page.push_route("/menu")
+            page.go("/menu")
 
-        return ft.View("/game", [
-            ft.Container(
-                ft.Column([
-                    ft.Container(
-                        ft.Row([
-                            ft.Button(ft.Icons.ARROW_BACK, icon_color=ft.Colors.WHITE,
-                                          on_click=back_to_menu),
-                            status_bar,
-                            ft.Row([
-                                ft.Button(
-                                    ft.Icons.VOLUME_UP,
-                                    icon_color=ft.Colors.WHITE,
-                                    tooltip="Toggle Sound FX",
-                                    on_click=lambda e: (
-                                        toggle_sound(),
-                                        setattr(e.control, "icon",
-                                            ft.Icons.VOLUME_UP if _sound_enabled["value"]
-                                            else ft.Icons.VOLUME_OFF),
-                                        page.update()
-                                    )
-                                ),
-                                ft.Button(
-                                    ft.Icons.MUSIC_NOTE,
-                                    icon_color=ft.Colors.WHITE,
-                                    tooltip="Toggle Music",
-                                    on_click=lambda e: (
-                                        toggle_music(),
-                                        setattr(e.control, "icon",
-                                            ft.Icons.MUSIC_NOTE if _music_enabled["value"]
-                                            else ft.Icons.MUSIC_OFF),
-                                        page.update()
-                                    )
-                                ),
-                            ], spacing=0)
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        bgcolor="#12122a", padding=ft.Padding(left=8, right=8, top=6, bottom=6)
-                    ),
-                    player_strip,
-                    ft.Container(board_col, alignment=ft.alignment.center,
-                                 padding=ft.Padding(left=2, right=2, top=0, bottom=0)),
-                    ft.Container(
-                        ft.Row([
-                            dice_row,
-                            roll_btn
-                        ], alignment=ft.MainAxisAlignment.SPACE_AROUND, spacing=12),
-                        bgcolor="#12122a", padding=10, border_radius=12
-                    ),
-                    ft.Container(
-                        ft.Column([
-                            ft.Text("😄 Emotes", size=11, color=ft.Colors.WHITE54),
-                            emote_row
-                        ], spacing=4),
-                        padding=ft.Padding(left=8, right=8, top=0, bottom=0)
-                    ),
-                    chat_ui,
-                    support_card(),
-                ], spacing=8, scroll=ft.ScrollMode.AUTO),
-                expand=True, bgcolor="#1a1a2e"
-            )
-        ], bgcolor="#1a1a2e", padding=0)
+        return ft.View(
+            "/game",
+            controls=[
+                ft.Container(
+                    expand=True,
+                    bgcolor="#1a1a2e",
+                    content=ft.Column(
+                        controls=[
+                            ft.Container(
+                                ft.Row([
+                                    ft.IconButton(
+                                        icon=ft.Icons.ARROW_BACK,
+                                        icon_color=ft.Colors.WHITE,
+                                        on_click=lambda e: page.run_task(back_to_menu, e)
+                                    ),
+                                    status_bar,
+                                    ft.Row([
+                                        ft.IconButton(
+                                            icon=ft.Icons.VOLUME_UP,
+                                            icon_color=ft.Colors.WHITE,
+                                            tooltip="Toggle Sound FX",
+                                            on_click=lambda e: (
+                                                toggle_sound(),
+                                                page.update()
+                                            )
+                                        ),
+                                        ft.IconButton(
+                                            icon=ft.Icons.MUSIC_NOTE,
+                                            icon_color=ft.Colors.WHITE,
+                                            tooltip="Toggle Music",
+                                            on_click=lambda e: (
+                                                toggle_music(),
+                                                page.update()
+                                            )
+                                        ),
+                                    ], spacing=0)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                bgcolor="#12122a",
+                                padding=ft.Padding(left=8, right=8, top=6, bottom=6)
+                            ),
+                            player_strip,
+                            ft.Container(
+                                board_col,
+                                alignment=ft.alignment.center,
+                                padding=ft.Padding(left=2, right=2, top=0, bottom=0)
+                            ),
+                            ft.Container(
+                                ft.Row([
+                                    dice_row,
+                                    roll_btn
+                                ], alignment=ft.MainAxisAlignment.SPACE_AROUND, spacing=12),
+                                bgcolor="#12122a", padding=10, border_radius=12
+                            ),
+                            ft.Container(
+                                ft.Column([
+                                    ft.Text("😄 Emotes", size=11, color=ft.Colors.WHITE54),
+                                    emote_row
+                                ], spacing=4),
+                                padding=ft.Padding(left=8, right=8, top=0, bottom=0)
+                            ),
+                            chat_ui,
+                            support_card(),
+                        ],
+                        spacing=8,
+                        scroll=ft.ScrollMode.AUTO,
+                    )
+                )
+            ],
+            bgcolor="#1a1a2e",
+            padding=0,
+        )
 
     # ── TOURNAMENT VIEW ───────────────────────
     def tournament_view():
-        t_list  = ft.ListView(expand=True, spacing=6)
+        t_list  = ft.ListView(expand=True, spacing=6, height=400)
         loading = ft.ProgressRing(visible=True, width=28, height=28)
 
         async def load_tournaments():
@@ -1368,14 +1444,16 @@ async def main(page: ft.Page):
                             ft.Container(
                                 ft.Row([
                                     ft.Column([
-                                        ft.Text(t.get("name","Tournament"),
+                                        ft.Text(t.get("name", "Tournament"),
                                                 size=14, weight=ft.FontWeight.BOLD,
                                                 color=ft.Colors.WHITE),
-                                        ft.Text(f"👥 {players_count}/8 players  |  "
-                                                f"🏆 Prize: {t.get('prize_coins',500)} coins",
-                                                size=11, color=ft.Colors.WHITE70)
+                                        ft.Text(
+                                            f"👥 {players_count}/8 players  |  "
+                                            f"🏆 Prize: {t.get('prize_coins', 500)} coins",
+                                            size=11, color=ft.Colors.WHITE70
+                                        )
                                     ], expand=True, spacing=2),
-                                    ft.Button(
+                                    ft.ElevatedButton(
                                         "Join",
                                         on_click=lambda e, tid=tid: page.run_task(join_tournament, tid),
                                         style=ft.ButtonStyle(
@@ -1405,7 +1483,7 @@ async def main(page: ft.Page):
                 snack(str(ex), ft.Colors.RED_700)
 
         async def create_tournament(e):
-            name = f"Tournament {random.randint(100,999)}"
+            name = f"Tournament {random.randint(100, 999)}"
             tid  = f"t_{int(time.time())}"
             try:
                 await fb_put(f"tournaments/{tid}", {
@@ -1424,25 +1502,42 @@ async def main(page: ft.Page):
 
         page.run_task(load_tournaments)
 
-        return ft.View("/tournament", [
-            header("Tournaments 🏆"),
-            ft.Container(
-                ft.Column([
-                    primary_btn("+ Create Tournament", create_tournament,
-                                icon=ft.Icons.ADD, color=ft.Colors.AMBER_700),
-                    ft.Divider(color="#44446a"),
-                    loading,
-                    ft.Container(t_list, expand=True, height=400),
-                    primary_btn("← Back", lambda e: page.run_task(page.push_route, "/menu"),
-                                color=ft.Colors.GREY_700)
-                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=16, expand=True, bgcolor="#1a1a2e"
-            )
-        ], bgcolor="#1a1a2e", padding=0)
+        return ft.View(
+            "/tournament",
+            controls=[
+                header("Tournaments 🏆"),
+                ft.Container(
+                    expand=True,
+                    bgcolor="#1a1a2e",
+                    padding=16,
+                    content=ft.Column(
+                        controls=[
+                            primary_btn(
+                                "+ Create Tournament", create_tournament,
+                                icon=ft.Icons.ADD, color=ft.Colors.AMBER_700
+                            ),
+                            ft.Divider(color="#44446a"),
+                            loading,
+                            t_list,
+                            primary_btn(
+                                "← Back",
+                                lambda e: page.go("/menu"),
+                                color=ft.Colors.GREY_700
+                            )
+                        ],
+                        spacing=10,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        scroll=ft.ScrollMode.AUTO,
+                    )
+                )
+            ],
+            bgcolor="#1a1a2e",
+            padding=0,
+        )
 
     # ── LEADERBOARD VIEW ─────────────────────
     def leaderboard_view():
-        lb_list = ft.ListView(expand=True, spacing=6)
+        lb_list = ft.ListView(expand=True, spacing=6, height=500)
         loading = ft.ProgressRing(visible=True, width=28, height=28)
 
         async def load_lb():
@@ -1459,7 +1554,7 @@ async def main(page: ft.Page):
                         [(uid, u) for uid, u in data.items() if isinstance(u, dict)],
                         key=lambda x: x[1].get("elo", DEFAULT_ELO), reverse=True
                     )[:20]
-                    medals = ["🥇","🥈","🥉"] + ["🎖️"] * 17
+                    medals = ["🥇", "🥈", "🥉"] + ["🎖️"] * 17
                     for i, (uid, u) in enumerate(ranked):
                         is_me = gs["user"] and uid == gs["user"].get("localId")
                         lb_list.controls.append(
@@ -1467,12 +1562,16 @@ async def main(page: ft.Page):
                                 ft.Row([
                                     ft.Text(medals[i], size=20),
                                     ft.Column([
-                                        ft.Text(u.get("display_name", u.get("email","?"))[:20],
-                                                size=13, weight=ft.FontWeight.BOLD,
-                                                color=ft.Colors.WHITE),
-                                        ft.Text(f"ELO {u.get('elo',DEFAULT_ELO)}  |  "
-                                                f"🏆 {u.get('wins',0)} wins",
-                                                size=11, color=ft.Colors.WHITE70)
+                                        ft.Text(
+                                            u.get("display_name", u.get("email", "?"))[:20],
+                                            size=13, weight=ft.FontWeight.BOLD,
+                                            color=ft.Colors.WHITE
+                                        ),
+                                        ft.Text(
+                                            f"ELO {u.get('elo', DEFAULT_ELO)}  |  "
+                                            f"🏆 {u.get('wins', 0)} wins",
+                                            size=11, color=ft.Colors.WHITE70
+                                        )
                                     ], expand=True, spacing=2),
                                 ], spacing=10),
                                 bgcolor=ft.Colors.PURPLE_900 if is_me else "#2d2d44",
@@ -1488,53 +1587,82 @@ async def main(page: ft.Page):
 
         page.run_task(load_lb)
 
-        return ft.View("/leaderboard", [
-            header("Leaderboard 📊"),
-            ft.Container(
-                ft.Column([
-                    loading,
-                    ft.Container(lb_list, expand=True, height=500),
-                    primary_btn("← Back", lambda e: page.run_task(page.push_route, "/menu"),
-                                color=ft.Colors.GREY_700)
-                ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=16, expand=True, bgcolor="#1a1a2e"
-            )
-        ], bgcolor="#1a1a2e", padding=0)
+        return ft.View(
+            "/leaderboard",
+            controls=[
+                header("Leaderboard 📊"),
+                ft.Container(
+                    expand=True,
+                    bgcolor="#1a1a2e",
+                    padding=16,
+                    content=ft.Column(
+                        controls=[
+                            loading,
+                            lb_list,
+                            primary_btn(
+                                "← Back",
+                                lambda e: page.go("/leaderboard"),
+                                color=ft.Colors.GREY_700
+                            )
+                        ],
+                        spacing=10,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        scroll=ft.ScrollMode.AUTO,
+                    )
+                )
+            ],
+            bgcolor="#1a1a2e",
+            padding=0,
+        )
 
     # ── ROUTER ───────────────────────────────
-    async def route_change(e):
-        page.clean()
+    def route_change(e):
         r = page.route
+        page.views.clear()
+
         if r == "/" or not r:
-            page.add(login_view())
+            page.views.append(login_view())
+
         elif r == "/menu":
             if not gs["user"]:
                 if not load_offline():
-                    page.go("/")
+                    page.views.append(login_view())
+                    page.update()
                     return
-            page.add(menu_view())
+            page.views.append(menu_view())
+
         elif r == "/lobby":
-            page.add(lobby_view())
+            page.views.append(lobby_view())
+
         elif r == "/game":
             update_ui()
-            page.add(game_view())
+            page.views.append(game_view())
             if not gs["is_online"]:
-                await maybe_bot_turn()
+                asyncio.ensure_future(maybe_bot_turn())
+
         elif r == "/tournament":
-            page.add(tournament_view())
+            page.views.append(tournament_view())
+
         elif r == "/leaderboard":
-            page.add(leaderboard_view())
+            page.views.append(leaderboard_view())
+
         else:
-            page.add(login_view())
+            page.views.append(login_view())
+
         page.update()
 
+    def view_pop(e):
+        if len(page.views) > 1:
+            page.views.pop()
+            top = page.views[-1]
+            page.go(top.route)
+
     page.on_route_change = route_change
-    page.bgcolor         = "#1a1a2e"
-    page.add(login_view())
-    page.update()
+    page.on_view_pop     = view_pop
+    page.go("/")
 
 
 # ─────────────────────────────────────────────
 # ENTRY POINT
 # ─────────────────────────────────────────────
-ft.run(main)
+ft.app(target=main)

@@ -1,9 +1,0 @@
-aiohttp
-certifi
-aiosignal
-frozenlist
-multidict
-yarl
-attrs
-charset-normalizer
-async-timeout

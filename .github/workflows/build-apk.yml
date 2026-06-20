@@ -22,7 +22,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "flet==0.84.0" aiohttp
+          pip install "flet==0.84.0" aiohttp certifi
 
       - name: Set up Java 17
         uses: actions/setup-java@v4.7.1
@@ -64,6 +64,18 @@ jobs:
         run: |
           flutter config --no-analytics
           yes | flutter doctor --android-licenses || true
+
+      - name: Place app icon
+        run: |
+          mkdir -p assets
+          if [ -f "assets/icon.png" ]; then
+            echo "Icon found in assets/"
+          elif [ -f "icon.png" ]; then
+            cp icon.png assets/icon.png
+            echo "Copied icon.png to assets/"
+          else
+            echo "No icon found"
+          fi
 
       - name: Build APK
         env:

@@ -5,4 +5,5 @@ frozenlist
 multidict
 yarl
 attrs
-
+charset-normalizer
+async-timeout

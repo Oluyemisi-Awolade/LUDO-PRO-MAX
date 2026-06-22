@@ -100,20 +100,22 @@ async def main(page: ft.Page):
         "six":     "https://cdn.freesound.org/previews/270/270402_5123851-lq.mp3",
         "bgm":     "https://cdn.freesound.org/previews/612/612598_5674468-lq.mp3",
     }
-    _audio   = {}
-    _sfx_on  = {"v": True}
-    _bgm_on  = {"v": True}
+    _audio  = {}
+    _sfx_on = {"v": True}
+    _bgm_on = {"v": True}
 
-    for key, url in SOUNDS.items():
-        try:
-            p = ft.Audio(src=url, autoplay=False,
-                         volume=0.3 if key == "bgm" else 0.8)
-            if key == "bgm":
-                p.release_mode = ft.ReleaseMode.LOOP
-            page.overlay.append(p)
-            _audio[key] = p
-        except:
-            pass
+    # Audio initialised AFTER first page.update() so overlay is ready
+    def init_audio():
+        for key, url in SOUNDS.items():
+            try:
+                p = ft.Audio(src=url, autoplay=False,
+                             volume=0.3 if key == "bgm" else 0.8)
+                if key == "bgm":
+                    p.release_mode = ft.ReleaseMode.LOOP
+                page.overlay.append(p)
+                _audio[key] = p
+            except:
+                pass
 
     async def play(k):
         if not _sfx_on["v"] or k == "bgm": return
@@ -298,7 +300,7 @@ async def main(page: ft.Page):
             gs["finished_players"].append(player)
             total_p = len(gs["players"])
             if player == gs["player_index"]:
-                place      = len(gs["finished_players"])
+                place       = len(gs["finished_players"])
                 coin_reward = [300, 200, 100, 50][min(place - 1, 3)]
                 gs["user_data"]["wins"]  += 1
                 gs["user_data"]["coins"] += coin_reward
@@ -472,11 +474,11 @@ async def main(page: ft.Page):
     # ── BOARD ─────────────────────────────────
     def build_board():
         board_col.controls.clear()
-        cell_size = 24
-        nest_sets = [set(map(tuple, NEST_POS[i])) for i in range(4)]
-        hp_sets   = [set(map(tuple, HOUSE_PATHS[i])) for i in range(4)]
-        hp_dirs   = ["↑", "→", "↓", "←"]
-        hp_colors = ["#ef9a9a", "#a5d6a7", "#fff59d", "#90caf9"]
+        cell_size   = 24
+        nest_sets   = [set(map(tuple, NEST_POS[i])) for i in range(4)]
+        hp_sets     = [set(map(tuple, HOUSE_PATHS[i])) for i in range(4)]
+        hp_dirs     = ["↑", "→", "↓", "←"]
+        hp_colors   = ["#ef9a9a", "#a5d6a7", "#fff59d", "#90caf9"]
         nest_colors = ["#c62828", "#2e7d32", "#f9a825", "#1565c0"]
         start_colors= ["#e53935", "#43a047", "#fdd835", "#1e88e5"]
 
@@ -494,7 +496,9 @@ async def main(page: ft.Page):
                 text = ""
 
                 for i in range(4):
-                    if pos in nest_sets[i]:  bg = nest_colors[i]; break
+                    if pos in nest_sets[i]:
+                        bg = nest_colors[i]
+                        break
                 else:
                     if pos in SAFE_SPOTS:
                         bg, text = "#607d8b", "★"
@@ -801,8 +805,8 @@ async def main(page: ft.Page):
 
     # ── GAME OVER ─────────────────────────────
     async def show_game_over(winner_idx):
-        labels   = ["🥇 1st", "🥈 2nd", "🥉 3rd", "4th"]
-        rewards  = [300, 200, 100, 50]
+        labels  = ["🥇 1st", "🥈 2nd", "🥉 3rd", "4th"]
+        rewards = [300, 200, 100, 50]
         my_place = (gs["finished_players"].index(gs["player_index"])
                     if gs["player_index"] in gs["finished_players"]
                     else len(gs["finished_players"]))
@@ -1043,7 +1047,7 @@ async def main(page: ft.Page):
         ])
 
     def v_lobby():
-        code_f  = ft.TextField(
+        code_f = ft.TextField(
             label="Room Code", width=180, bgcolor="#2d2d44",
             border_radius=10, color=ft.Colors.WHITE,
             text_align=ft.TextAlign.CENTER,
@@ -1410,12 +1414,19 @@ async def main(page: ft.Page):
     page.on_route_change = route_change
     page.on_view_pop     = view_pop
 
-    # ── CRITICAL: delayed initial navigation ──
+    # ── STARTUP: wait for Flutter engine, then init audio and navigate ──
     async def start():
-        await asyncio.sleep(0.1)   # yield to Flutter engine to finish mounting
+        # Give the Flutter engine time to finish mounting on Android.
+        # 0.3 s is more reliable than 0.1 s on slower devices.
+        await asyncio.sleep(0.3)
+        # Init audio AFTER the page is mounted so overlay.append works
+        init_audio()
         page.go("/")
 
     page.run_task(start)
 
 
+# ─────────────────────────────────────────────
+# ENTRY POINT
+# ─────────────────────────────────────────────
 ft.app(target=main)

@@ -104,7 +104,6 @@ async def main(page: ft.Page):
     _sfx_on = {"v": True}
     _bgm_on = {"v": True}
 
-    # Audio initialised AFTER first page.update() so overlay is ready
     def init_audio():
         for key, url in SOUNDS.items():
             try:
@@ -816,12 +815,12 @@ async def main(page: ft.Page):
             setup_game(len(gs["players"]),
                        "local" if gs["local_players"] > 0 else "bot",
                        gs["bot_difficulty"], gs["two_dice_mode"])
-            page.go("/game")
+            nav("/game")
 
         async def do_menu(e):
             page.close(dlg)
             gs["stop_poll"] = True
-            page.go("/menu")
+            nav("/menu")
 
         dlg = ft.AlertDialog(
             modal=True, bgcolor="#1a1a2e",
@@ -868,6 +867,34 @@ async def main(page: ft.Page):
         page.update()
 
     # ─────────────────────────────────────────
+    # NAVIGATION — manual stack, NO page.go()
+    # page.go() + on_route_change is unreliable
+    # on Android with flet 0.84. We manage
+    # page.views directly instead.
+    # ─────────────────────────────────────────
+    def nav(route):
+        """Push a new view onto the stack and render it."""
+        page.views.clear()
+        if route == "/":
+            page.views.append(v_login())
+        elif route == "/menu":
+            page.views.append(v_menu())
+        elif route == "/lobby":
+            page.views.append(v_lobby())
+        elif route == "/game":
+            update_ui()
+            page.views.append(v_game())
+            if not gs["is_online"]:
+                page.run_task(maybe_bot_turn)
+        elif route == "/tournament":
+            page.views.append(v_tournament())
+        elif route == "/leaderboard":
+            page.views.append(v_leaderboard())
+        else:
+            page.views.append(v_login())
+        page.update()
+
+    # ─────────────────────────────────────────
     # VIEWS
     # ─────────────────────────────────────────
     def v_login():
@@ -895,14 +922,14 @@ async def main(page: ft.Page):
                 else:
                     gs["user"] = user
                     await init_user(user["localId"], ef.value)
-                    page.go("/menu")
+                    nav("/menu")
             except Exception as ex:
                 snack(str(ex), ft.Colors.RED_700)
             loading.visible = False; page.update()
 
         def do_offline(e):
             if load_offline():
-                page.go("/menu")
+                nav("/menu")
             else:
                 gs["user"]      = {"localId": "offline", "idToken": ""}
                 gs["user_data"] = {
@@ -911,7 +938,7 @@ async def main(page: ft.Page):
                     "elo": DEFAULT_ELO, "tournament_wins": 0,
                     "skins": {}, "ads": {}, "achievements": []
                 }
-                page.go("/menu")
+                nav("/menu")
 
         return ft.View("/", bgcolor="#1a1a2e", padding=0, controls=[
             ft.Container(
@@ -952,16 +979,16 @@ async def main(page: ft.Page):
 
         def go_bot(diff, two=False):
             setup_game(4, "bot", diff, two_dice=two)
-            page.go("/game")
+            nav("/game")
 
         def go_local(n):
             setup_game(n, "local")
-            page.go("/game")
+            nav("/game")
 
         def go_online(e):
             if not gs["user"] or gs["user"]["localId"] == "offline":
                 snack("Login to play online", ft.Colors.RED_700); return
-            page.go("/lobby")
+            nav("/lobby")
 
         return ft.View("/menu", bgcolor="#1a1a2e", padding=0,
                        scroll=ft.ScrollMode.AUTO,
@@ -1027,17 +1054,17 @@ async def main(page: ft.Page):
                         mk_btn("Online Multiplayer 🌍", go_online,
                                icon=ft.Icons.WIFI, color=ft.Colors.CYAN_700),
                         mk_btn("Tournaments 🏆",
-                               lambda e: page.go("/tournament"),
+                               lambda e: nav("/tournament"),
                                icon=ft.Icons.EMOJI_EVENTS,
                                color=ft.Colors.AMBER_700),
                         mk_btn("Leaderboard 📊",
-                               lambda e: page.go("/leaderboard"),
+                               lambda e: nav("/leaderboard"),
                                icon=ft.Icons.LEADERBOARD,
                                color=ft.Colors.PINK_700),
                         ft.Divider(color="#44446a"),
                         support_card(),
                         ft.TextButton(
-                            "Logout", on_click=lambda e: page.go("/"),
+                            "Logout", on_click=lambda e: nav("/"),
                             style=ft.ButtonStyle(color=ft.Colors.WHITE38)
                         ),
                         ft.Container(height=20),
@@ -1059,13 +1086,13 @@ async def main(page: ft.Page):
             code = await create_room(two_dice=two)
             info.value = f"Room: {code} — waiting for players…"
             page.update()
-            page.go("/game")
+            nav("/game")
 
         async def do_join(e):
             if not code_f.value.strip():
                 snack("Enter room code", ft.Colors.RED_700); return
             ok, msg = await join_room(code_f.value.strip())
-            if ok: page.go("/game")
+            if ok: nav("/game")
             else:  snack(msg, ft.Colors.RED_700)
 
         return ft.View("/lobby", bgcolor="#1a1a2e", padding=0, controls=[
@@ -1104,7 +1131,7 @@ async def main(page: ft.Page):
                         ], alignment=ft.MainAxisAlignment.CENTER, spacing=8),
                         info,
                         ft.Divider(color="#44446a"),
-                        mk_btn("← Back", lambda e: page.go("/menu"),
+                        mk_btn("← Back", lambda e: nav("/menu"),
                                color=ft.Colors.GREY_700),
                     ]
                 )
@@ -1147,7 +1174,7 @@ async def main(page: ft.Page):
             gs["stop_poll"] = True
             gs["game_started"] = False
             await stop_bgm()
-            page.go("/menu")
+            nav("/menu")
 
         return ft.View("/game", bgcolor="#1a1a2e", padding=0, controls=[
             ft.Container(
@@ -1306,7 +1333,7 @@ async def main(page: ft.Page):
                                icon=ft.Icons.ADD, color=ft.Colors.AMBER_700),
                         ft.Divider(color="#44446a"),
                         spinner, t_list,
-                        mk_btn("← Back", lambda e: page.go("/menu"),
+                        mk_btn("← Back", lambda e: nav("/menu"),
                                color=ft.Colors.GREY_700),
                     ]
                 )
@@ -1373,55 +1400,24 @@ async def main(page: ft.Page):
                     spacing=10,
                     controls=[
                         spinner, lb_list,
-                        mk_btn("← Back", lambda e: page.go("/menu"),
+                        mk_btn("← Back", lambda e: nav("/menu"),
                                color=ft.Colors.GREY_700),
                     ]
                 )
             )
         ])
 
-    # ── ROUTER ────────────────────────────────
-    def route_change(e):
-        r = page.route or "/"
-        page.views.clear()
-        if r == "/":
-            page.views.append(v_login())
-        elif r == "/menu":
-            if not gs["user"] and not load_offline():
-                page.views.append(v_login())
-            else:
-                page.views.append(v_menu())
-        elif r == "/lobby":
-            page.views.append(v_lobby())
-        elif r == "/game":
-            update_ui()
-            page.views.append(v_game())
-            if not gs["is_online"]:
-                page.run_task(maybe_bot_turn)
-        elif r == "/tournament":
-            page.views.append(v_tournament())
-        elif r == "/leaderboard":
-            page.views.append(v_leaderboard())
-        else:
-            page.views.append(v_login())
-        page.update()
-
-    def view_pop(e):
-        if len(page.views) > 1:
-            page.views.pop()
-            page.go(page.views[-1].route)
-
-    page.on_route_change = route_change
-    page.on_view_pop     = view_pop
-
-    # ── STARTUP: wait for Flutter engine, then init audio and navigate ──
+    # ── STARTUP ───────────────────────────────
+    # Do NOT use page.go() / on_route_change.
+    # Push the first view directly after a small
+    # delay to let the Flutter engine mount.
     async def start():
-        # Give the Flutter engine time to finish mounting on Android.
-        # 0.3 s is more reliable than 0.1 s on slower devices.
-        await asyncio.sleep(0.3)
-        # Init audio AFTER the page is mounted so overlay.append works
+        await asyncio.sleep(0.5)
         init_audio()
-        page.go("/")
+        # Push login view directly — no router
+        page.views.clear()
+        page.views.append(v_login())
+        page.update()
 
     page.run_task(start)
 

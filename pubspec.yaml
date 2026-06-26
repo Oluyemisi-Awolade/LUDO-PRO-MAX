@@ -1,0 +1,50 @@
+name: ludo_pro_max
+description: Ludo Pro Max — professional multiplayer Ludo game
+version: 2.0.0+1
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  firebase_database: ^10.4.0
+
+  # State management
+  flutter_riverpod: ^2.4.9
+
+  # UI
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.3.0
+  lottie: ^3.0.0
+
+  # Audio
+  audioplayers: ^5.2.1
+
+  # Persistence
+  shared_preferences: ^2.2.2
+
+  # Utils
+  uuid: ^4.2.2
+  url_launcher: ^6.2.2
+  flutter_svg: ^2.0.9
+  package_info_plus: ^5.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.7
+  riverpod_generator: ^2.3.9
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/sounds/

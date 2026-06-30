@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/values/colors.xml -->
+<resources>
+    <!-- Must match AppColors.bg (#0D0D1A) so the splash has zero flash. -->
+    <color name="launch_background">#0D0D1A</color>
+</resources>

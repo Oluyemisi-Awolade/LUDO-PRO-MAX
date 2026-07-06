@@ -461,4 +461,16 @@ class GameNotifier extends StateNotifier<GameState> {
     _stopPoll();
     super.dispose();
   }
+  void setPlayerColor(int colorIndex, String displayName) {
+  state = state.copyWith(
+    playerIndex:       colorIndex,
+    playerColorIndex:  colorIndex,
+    playerDisplayName: displayName,
+  );
+  final ud = state.userData;
+  if (ud != null) {
+    state = state.copyWith(
+        userData: ud.copyWith(displayName: displayName));
+  }
+  }
 }

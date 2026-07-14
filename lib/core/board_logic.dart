@@ -28,7 +28,7 @@ int pathIndex(int player, List<int> pos) {
 bool canMove(int player, List<List<int>> tokens, int tokenIdx, int steps,
     {int dice1 = 0, int dice2 = 0}) {
   final pidx = pathIndex(player, tokens[tokenIdx]);
-  if (pidx == -1) return dice1 == 6 || dice2 == 6;
+  if (pidx == -1) return steps == 6;
   if (pidx == 200) return false;
   if (pidx >= 100) {
     final hs = (pidx - 100) + steps;

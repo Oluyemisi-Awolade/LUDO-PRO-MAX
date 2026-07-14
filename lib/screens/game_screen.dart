@@ -252,8 +252,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                   // Always show BOTH dice
                   Row(children: [
                     DiceWidget(value: gs.dice1),
-                    const SizedBox(width: 10),
-                    DiceWidget(value: gs.dice2),
+                    if (gs.twoDiceMode) ...[
+                      const SizedBox(width: 10),
+                      DiceWidget(value: gs.dice2),
+                    ],
                     if (gs.diceRolled) ...[
                       const SizedBox(width: 10),
                       Container(

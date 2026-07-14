@@ -31,6 +31,9 @@ class GameNotifier extends StateNotifier<GameState> {
     bool          twoDice     = false,
     int           numPlayers  = 4,
     int           playerColor = 0,
+    if (mode == GameMode.vsBot && state.currentTurn != state.playerIndex) {
+      _scheduleBotTurn();
+    }
   }) {
     _stopPoll();
     _botRunning = false;

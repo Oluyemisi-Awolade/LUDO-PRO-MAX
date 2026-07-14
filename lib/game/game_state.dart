@@ -57,16 +57,18 @@ class GameState {
   });
 
   int  get totalDice   => twoDiceMode ? dice1 + dice2 : dice1;
-  bool get diceRolled  => dice1 > 0;
+  bool get diceRolled => dice1 > 0 || dice2 > 0;
   bool get isPlayerTurn => currentTurn == playerIndex;
   bool get gameOver    => winner != null;
 
-  List<int> get movable =>
-      diceRolled && tokens.containsKey(currentTurn)
-          ? movableTokens(
-              currentTurn, tokens[currentTurn]!,
-              totalDice, dice1: dice1, dice2: dice2)
-          : [];
+  List<int> get movable {
+  if (!diceRolled || !tokens.containsKey(currentTurn)) return [];
+  final t = tokens[currentTurn]!;
+  final set = <int>{};
+  if (dice1 > 0) set.addAll(movableTokens(currentTurn, t, dice1));
+  if (twoDiceMode && dice2 > 0) set.addAll(movableTokens(currentTurn, t, dice2));
+  return set.toList();
+  }
 
   GameState copyWith({
     GameMode?      mode,

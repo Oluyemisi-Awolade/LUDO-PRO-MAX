@@ -156,48 +156,138 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   // ── Move token ─────────────────────────────────────────────────────────────
-  Future<bool> moveToken(int player, int tokenIdx) async {
-    if (_moveLock) return false;
-    _moveLock = true;
-    try {
-      return await _doMove(player, tokenIdx);
-    } finally {
-      _moveLock = false;
+  Future<bool> moveToken(int player, int tokenIdx, {int dieChoice = 1}) async {
+  if (_moveLock) return false;
+  _moveLock = true;
+  try {
+    return await _doMove(player, tokenIdx, dieChoice: dieChoice);
+  } finally {
+    _moveLock = false;
+  }
+}
+
+Future<bool> _doMove(int player, int tokenIdx, {int dieChoice = 1}) async {
+  final d1 = state.dice1;
+  final d2 = state.dice2;
+  final steps = (dieChoice == 2 && state.twoDiceMode) ? d2 : d1;
+  if (steps == 0) return false;
+
+  final tokens = Map<int, List<List<int>>>.from(
+    state.tokens.map(
+      (k, v) => MapEntry(k, v.map((p) => List<int>.from(p)).toList()),
+    ),
+  );
+
+  if (!canMove(player, tokens[player]!, tokenIdx, steps)) return false;
+
+  final newPos = calcNewPos(player, tokens[player]!, tokenIdx, steps);
+  bool captured = false;
+
+  if (!isSafe(newPos) &&
+      !(newPos[0] == kFinalHome[0] && newPos[1] == kFinalHome[1])) {
+    for (final entry in tokens.entries) {
+      if (entry.key == player) continue;
+      for (int ti = 0; ti < entry.value.length; ti++) {
+        final tp = entry.value[ti];
+        if (tp[0] == newPos[0] && tp[1] == newPos[1] && !isSafe(tp)) {
+          tokens[entry.key]![ti] = List<int>.from(kNestPositions[entry.key][ti]);
+          captured = true;
+        }
+      }
+    }
+  }
+  if (captured) await _audio.play('capture');
+
+  tokens[player]![tokenIdx] = newPos;
+  await _audio.play('move');
+
+  final remainingD1 = dieChoice == 1 ? 0 : d1;
+  final remainingD2 = (dieChoice == 2 && state.twoDiceMode) ? 0 : d2;
+
+  List<int> finished = List<int>.from(state.finishedPlayers);
+  int? winner = state.winner;
+
+  if (allHome(tokens[player]!)) {
+    if (!finished.contains(player)) finished.add(player);
+    if (player == state.playerIndex) {
+      final place  = finished.indexOf(player);
+      final reward = kPlaceRewards[place.clamp(0, 3)];
+      final ud = state.userData;
+      if (ud != null) {
+        final updated = ud.copyWith(
+          wins: ud.wins + 1, coins: ud.coins + reward,
+          games: ud.games + 1, elo: newElo(ud.elo, kDefaultElo, won: true),
+        );
+        state = state.copyWith(userData: updated);
+        _fb.saveUser(updated);
+      }
+      await _audio.play('win');
+    }
+    final remaining = [
+      for (int i = 0; i < state.numPlayers; i++)
+        if (!finished.contains(i)) i
+    ];
+    if (remaining.length <= 1) {
+      if (remaining.isNotEmpty &&
+          remaining.first == state.playerIndex &&
+          !finished.contains(state.playerIndex)) {
+        final ud = state.userData;
+        if (ud != null) {
+          final updated = ud.copyWith(
+            losses: ud.losses + 1,
+            elo: newElo(ud.elo, kDefaultElo, won: false),
+          );
+          state = state.copyWith(userData: updated);
+          _fb.saveUser(updated);
+        }
+      }
+      winner = finished.isNotEmpty ? finished.first : player;
     }
   }
 
-  Future<bool> _doMove(int player, int tokenIdx) async {
-    final d1    = state.dice1;
-    final d2    = state.dice2;
-    final total = state.totalDice;
-    if (d1 == 0) return false;
+  final stillHasDie = (remainingD1 > 0) || (state.twoDiceMode && remainingD2 > 0);
 
-    final tokens = Map<int, List<List<int>>>.from(
-      state.tokens.map((k, v) =>
-          MapEntry(k, v.map((p) => List<int>.from(p)).toList())),
+  if (stillHasDie && winner == null) {
+    state = state.copyWith(
+      tokens: tokens, dice1: remainingD1, dice2: remainingD2,
+      finishedPlayers: finished, winner: winner,
+      extraTurn: state.extraTurn || captured,
     );
+    await _syncRoom();
 
-    final pidx   = pathIndex(player, tokens[player]![tokenIdx]);
-    final inNest = pidx == -1;
-
-    // Determine steps to use
-    // If in nest with two-dice: use the 6 to exit, other die is leftover
-    int stepsUsed = total;
-    int leftover  = 0;
-
-    if (inNest && state.twoDiceMode) {
-      if (d1 == 6 && d2 != 6) {
-        stepsUsed = 6;
-        leftover  = d2;
-      } else if (d2 == 6 && d1 != 6) {
-        stepsUsed = 6;
-        leftover  = d1;
+    final movesLeft = movableTokens(
+      player, tokens[player]!, remainingD1 > 0 ? remainingD1 : remainingD2,
+    );
+    if (movesLeft.isEmpty) {
+      final extra = state.extraTurn;
+      state = state.copyWith(dice1: 0, dice2: 0, pendingDice: 0);
+      if (!extra) {
+        await _advanceTurn();
       } else {
-        // Both 6
-        stepsUsed = 6;
-        leftover  = 0; // doubles already gives extra turn
+        state = state.copyWith(extraTurn: false);
+        if (state.mode != GameMode.online) _scheduleBotTurn();
       }
     }
+    return true;
+  }
+
+  final extra = state.extraTurn || captured;
+  state = state.copyWith(
+    tokens: tokens, dice1: 0, dice2: 0, pendingDice: 0,
+    finishedPlayers: finished, winner: winner, extraTurn: extra,
+  );
+  await _syncRoom();
+
+  if (winner == null) {
+    if (!extra) {
+      await _advanceTurn();
+    } else {
+      state = state.copyWith(extraTurn: false);
+      if (state.mode != GameMode.online) _scheduleBotTurn();
+    }
+  }
+  return true;
+} 
 
     if (!canMove(player, tokens[player]!, tokenIdx, stepsUsed,
         dice1: d1, dice2: d2)) return false;
@@ -350,47 +440,91 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   Future<void> _runBot() async {
-    if (_botRunning || state.gameOver)           return;
-    if (state.mode == GameMode.localMultiplayer) return;
-    if (state.currentTurn == state.playerIndex)  return;
-    _botRunning = true;
-    try {
-      final bot = state.currentTurn;
-      final d1  = _rng.nextInt(6) + 1;
-      final d2  = state.twoDiceMode ? _rng.nextInt(6) + 1 : 0;
-      final total = state.twoDiceMode ? d1 + d2 : d1;
+  if (_botRunning || state.gameOver) return;
+  if (state.mode == GameMode.localMultiplayer) return;
+  if (state.currentTurn == state.playerIndex) return;
+  _botRunning = true;
+  try {
+    final bot = state.currentTurn;
+    final d1 = _rng.nextInt(6) + 1;
+    final d2 = state.twoDiceMode ? _rng.nextInt(6) + 1 : 0;
+    await _audio.play('dice');
 
-      state = state.copyWith(dice1: d1, dice2: d2);
-      await _audio.play('dice');
-      await Future.delayed(const Duration(milliseconds: 700));
+    final isDouble = state.twoDiceMode ? d1 == d2 : d1 == 6;
+    int  sixCount  = state.sixCount;
+    bool extra     = false;
 
-      if (state.gameOver || state.currentTurn != bot) return;
-
-      final ti = botChooseToken(
-        player:     bot,
-        tokens:     state.tokens[bot]!,
-        steps:      total,
-        difficulty: state.botDifficulty,
-        allTokens:  state.tokens,
-        dice1:      d1,
-        dice2:      d2,
-      );
-
-      if (ti == -1) {
+    if (isDouble) {
+      await _audio.play('six');
+      sixCount++;
+      extra = true;
+      if (sixCount >= 3) {
+        state = state.copyWith(
+            dice1: d1, dice2: d2, sixCount: 0, extraTurn: false);
+        await Future.delayed(const Duration(milliseconds: 800));
         state = state.copyWith(dice1: 0, dice2: 0, pendingDice: 0);
         await _advanceTurn();
-      } else {
-        await _doMove(bot, ti);
+        return;
       }
-    } finally {
-      _botRunning = false;
-      if (!state.gameOver &&
-          state.currentTurn != state.playerIndex &&
-          state.mode != GameMode.localMultiplayer) {
-        Future.delayed(const Duration(milliseconds: 800), _runBot);
-      }
+    } else {
+      sixCount = 0;
+      extra    = false;
+    }
+
+    state = state.copyWith(
+      dice1: d1, dice2: d2, sixCount: sixCount, extraTurn: extra,
+    );
+    await Future.delayed(const Duration(milliseconds: 700));
+    if (state.gameOver || state.currentTurn != bot) return;
+
+    await _botPlayDie(bot, 1);
+    if (state.gameOver || state.currentTurn != bot) return;
+
+    if (state.twoDiceMode && state.dice2 > 0 && state.currentTurn == bot) {
+      await _botPlayDie(bot, 2);
+    }
+  } finally {
+    _botRunning = false;
+    if (!state.gameOver &&
+        state.currentTurn != state.playerIndex &&
+        state.mode != GameMode.localMultiplayer) {
+      Future.delayed(const Duration(milliseconds: 800), _runBot);
     }
   }
+}
+
+Future<void> _botPlayDie(int bot, int dieChoice) async {
+  final dieVal = dieChoice == 1 ? state.dice1 : state.dice2;
+  if (dieVal == 0) return;
+
+  final ti = botChooseToken(
+    player: bot,
+    tokens: state.tokens[bot]!,
+    steps: dieVal,
+    difficulty: state.botDifficulty,
+    allTokens: state.tokens,
+    dice1: state.dice1,
+    dice2: state.dice2,
+  );
+
+  if (ti == -1) {
+    state = dieChoice == 1
+        ? state.copyWith(dice1: 0)
+        : state.copyWith(dice2: 0);
+
+    if (state.dice1 == 0 && (!state.twoDiceMode || state.dice2 == 0)) {
+      final extra = state.extraTurn;
+      state = state.copyWith(pendingDice: 0);
+      if (!extra) {
+        await _advanceTurn();
+      } else {
+        state = state.copyWith(extraTurn: false);
+      }
+    }
+  } else {
+    await _doMove(bot, ti, dieChoice: dieChoice);
+  }
+}
 
   // ── Online ─────────────────────────────────────────────────────────────────
   Future<String> createRoom({bool twoDice = false}) async {

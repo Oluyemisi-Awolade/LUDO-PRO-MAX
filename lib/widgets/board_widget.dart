@@ -32,13 +32,26 @@ class BoardWidget extends ConsumerWidget {
 
           for (int ti = 0; ti < toks.length; ti++) {
             if (toks[ti][0] == row && toks[ti][1] == col) {
-              // Pass individual dice values so nest-exit rule is correct
-              if (canMove(
-                gs.playerIndex, toks, ti, gs.totalDice,
-                dice1: gs.dice1,
-                dice2: gs.dice2,
-              )) {
-                ref.read(gameProvider.notifier).moveToken(gs.playerIndex, ti);
+              final okD1 = gs.dice1 > 0 && canMove(gs.playerIndex, toks, ti, gs.dice1);
+              final okD2 = gs.twoDiceMode && gs.dice2 > 0 &&
+                  canMove(gs.playerIndex, toks, ti, gs.dice2);
+
+              int? dieChoice;
+              if (okD1 && okD2) {
+                final pos1 = calcNewPos(gs.playerIndex, toks, ti, gs.dice1);
+                final pos2 = calcNewPos(gs.playerIndex, toks, ti, gs.dice2);
+                final cap1 = _landsOnOpponent(gs, pos1);
+                final cap2 = _landsOnOpponent(gs, pos2);
+                dieChoice = (cap2 && !cap1) ? 2 : 1;
+              } else if (okD1) {
+                dieChoice = 1;
+              } else if (okD2) {
+                dieChoice = 2;
+              }
+
+              if (dieChoice != null) {
+                ref.read(gameProvider.notifier)
+                    .moveToken(gs.playerIndex, ti, dieChoice: dieChoice);
                 return;
               }
             }

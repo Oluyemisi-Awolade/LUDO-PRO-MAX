@@ -6,6 +6,16 @@ import '../core/board_logic.dart';
 import '../game/game_notifier.dart';
 import 'board_painter.dart';
 
+bool _landsOnOpponent(GameState gs, List<int> pos) {
+  if (isSafe(pos)) return false;
+  for (final e in gs.tokens.entries) {
+    if (e.key == gs.playerIndex) continue;
+    for (final tp in e.value) {
+      if (tp[0] == pos[0] && tp[1] == pos[1]) return true;
+    }
+  }
+  return false;
+}
 class BoardWidget extends ConsumerWidget {
   const BoardWidget({super.key});
 

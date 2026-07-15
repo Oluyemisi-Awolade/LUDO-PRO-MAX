@@ -34,7 +34,7 @@ bool canMove(int player, List<List<int>> tokens, int tokenIdx, int steps,
     final hs = (pidx - 100) + steps;
     return hs <= 5 || hs == 6; // 6 cells then centre
   }
-  final rem = kTrackPath.length - pidx;
+  final rem = kTrackPath.length - pidx - 1;
   if (steps >= rem) return (steps - rem) <= 6;
   return true;
 }
@@ -57,7 +57,7 @@ List<int> calcNewPos(
         kTrackPath[i][1] == kStartPositions[player][1]) si = i;
   }
   final relIdx = (ti - si + trackLen) % trackLen;
-  final rem = trackLen - relIdx;
+  final rem    = trackLen - relIdx - 1;
   if (steps >= rem) {
     final hs = steps - rem;
     if (hs < 6) return List<int>.from(kHousePaths[player][hs]);

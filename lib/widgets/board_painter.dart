@@ -177,33 +177,43 @@ class BoardPainter extends CustomPainter {
       }
     }
 
-    // ── Draw centre home as large circle covering junction gap ────────────────
-    // The circle covers the adjacent junction cells so there is no visible gap
+    // ── Draw centre home as a circle sized to fit within its own cell ─────────
+    // Kept small on purpose so it never bleeds into the 6th house-path cell
+    // of any colour's column — those are painted as part of the cell loop
+    // above and must stay fully visible.
     final homeCx = 7 * cw + cw / 2;
     final homeCy = 7 * ch + ch / 2;
-    final homeR  = cw * 1.42; // covers from centre into adjacent hp cells
+    final homeR  = cw * 0.42; // safely inside the centre cell, no overlap
 
-    // Outer glow
-    canvas.drawCircle(Offset(homeCx, homeCy), homeR + 2,
+    // Outer glow — tight radius/blur so it doesn't spill onto neighbours
+    canvas.drawCircle(Offset(homeCx, homeCy), homeR,
         Paint()
-          ..color = Colors.purple.withOpacity(0.3)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+          ..color = Colors.purple.withOpacity(0.2)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
 
     // Main circle
     canvas.drawCircle(Offset(homeCx, homeCy), homeR,
         Paint()..color = AppColors.boardHome);
 
-    // Multi-coloured wedges (like physical board centre star)
+    // Multi-coloured wedges (like physical board centre star) — each wedge
+    // points toward the side of the hub where that colour's own home column
+    // physically sits, not just a fixed clockwise order.
     final wedgePaint = Paint()..style = PaintingStyle.fill;
     const wedgeColors = [
-      Color(0xFFE53935), // Red
-      Color(0xFF43A047), // Green
-      Color(0xFFFDD835), // Yellow
-      Color(0xFF1E88E5), // Blue
+      Color(0xFFE53935), // Red    (column sits west of centre)
+      Color(0xFF43A047), // Green  (column sits north of centre)
+      Color(0xFFFDD835), // Yellow (column sits east of centre)
+      Color(0xFF1E88E5), // Blue   (column sits south of centre)
+    ];
+    const wedgeCenterAngles = [
+      math.pi,        // Red    -> west
+      -math.pi / 2,   // Green  -> north
+      0.0,            // Yellow -> east
+      math.pi / 2,    // Blue   -> south
     ];
     for (int i = 0; i < 4; i++) {
       wedgePaint.color = wedgeColors[i].withOpacity(0.55);
-      final startAngle = (i * math.pi / 2) - math.pi / 4;
+      final startAngle = wedgeCenterAngles[i] - math.pi / 4;
       canvas.drawArc(
         Rect.fromCircle(center: Offset(homeCx, homeCy), radius: homeR * 0.88),
         startAngle, math.pi / 2, true, wedgePaint,

@@ -69,7 +69,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         content: SingleChildScrollView(
@@ -107,14 +107,15 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      final freshGs = ref.read(gameProvider);
+                      Navigator.of(dialogContext, rootNavigator: true).pop();
                       _gameOverShown = false;
-                      final gs = ref.read(gameProvider);
                       ref.read(gameProvider.notifier).setupGame(
-                        mode:       gs.mode,
-                        difficulty: gs.botDifficulty,
-                        twoDice:    true,
-                        numPlayers: gs.numPlayers,
+                        mode:        freshGs.mode,
+                        difficulty:  freshGs.botDifficulty,
+                        twoDice:     freshGs.twoDiceMode,
+                        numPlayers:  freshGs.numPlayers,
+                        playerColor: freshGs.playerColorIndex,
                       );
                       ref.read(audioServiceProvider).startBgm();
                     },
@@ -127,7 +128,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      Navigator.of(dialogContext, rootNavigator: true).pop();
+                      _gameOverShown = false;
                       _goBack();
                     },
                     style: ElevatedButton.styleFrom(

@@ -38,10 +38,10 @@ class AudioService {
   // pubspec.yaml — AudioPlayer's AssetSource adds the `assets/` prefix
   // itself, so do NOT include it here.
   static const _sfx = {
-    'dice':    'audio/dice.mp3',
-    'move':    'audio/move.wav',
-    'capture': 'audio/capture.wav',
-    'win':     'audio/win.wav',
+    'dice':    'audio/Dice.mp3',
+    'move':    'audio/Move.wav',
+    'capture': 'audio/Capture.wav',
+    'win':     'audio/Win.wav',
   };
 
   static const _bgmAsset = 'audio/bgm.mp3';
@@ -49,7 +49,7 @@ class AudioService {
   // Loops only while it's the human player's turn in vsBot mode and
   // they haven't rolled yet — started/stopped by GameScreen based on
   // game state, not tied to screen lifecycle like bgm is.
-  static const _waitingAsset = 'audio/waiting.wav';
+  static const _waitingAsset = 'audio/Waiting.wav';
 
   // FIX: each player is registered in _players BEFORE its setVolume call
   // is awaited, so the map is fully populated the instant init() runs

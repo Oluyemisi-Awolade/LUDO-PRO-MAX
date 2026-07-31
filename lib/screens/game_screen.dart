@@ -23,6 +23,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   final _chatCtrl = TextEditingController();
   bool _showChat  = false;
   bool _gameOverShown = false;
+  bool _waitingActive = false;
 
   @override
   void initState() {
@@ -33,8 +34,27 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   @override
   void dispose() {
     _chatCtrl.dispose();
-    ref.read(audioServiceProvider).stopBgm();
+    ref.read(audioServiceProvider)
+      ..stopBgm()
+      ..stopWaiting();
     super.dispose();
+  }
+
+  // Waiting loop plays whenever nobody has rolled yet this turn — covers
+  // vsBot (your turn, and the bot's brief "thinking" delay before it
+  // auto-rolls), and local/online multiplayer (your turn, or waiting on
+  // whichever other player's turn it currently is). Stops the instant
+  // dice are rolled or the game ends. Guarded by _waitingActive so it's
+  // only started/stopped on actual transitions, not every rebuild.
+  void _syncWaitingSound(GameState gs) {
+    final shouldPlay = !gs.diceRolled && !gs.gameOver;
+    if (shouldPlay && !_waitingActive) {
+      _waitingActive = true;
+      ref.read(audioServiceProvider).startWaiting();
+    } else if (!shouldPlay && _waitingActive) {
+      _waitingActive = false;
+      ref.read(audioServiceProvider).stopWaiting();
+    }
   }
 
   Future<void> _roll() async {
@@ -44,7 +64,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   void _goBack() {
-    ref.read(audioServiceProvider).stopBgm();
+    ref.read(audioServiceProvider)
+      ..stopBgm()
+      ..stopWaiting();
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const MenuScreen()),
     );
@@ -140,6 +162,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                       final freshGs = ref.read(gameProvider);
                       Navigator.of(dialogContext, rootNavigator: true).pop();
                       _gameOverShown = false;
+                      _waitingActive = false;
                       try {
                         ref.read(gameProvider.notifier).setupGame(
                           mode:        freshGs.mode,
@@ -169,6 +192,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                     onPressed: () {
                       Navigator.of(dialogContext, rootNavigator: true).pop();
                       _gameOverShown = false;
+                      _waitingActive = false;
                       _goBack();
                     },
                     style: ElevatedButton.styleFrom(
@@ -189,6 +213,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     final gs    = ref.watch(gameProvider);
     final audio = ref.read(audioServiceProvider);
     _checkGameOver(gs);
+    _syncWaitingSound(gs);
 
     final canRoll  = gs.isPlayerTurn && !gs.diceRolled && !gs.gameOver;
 

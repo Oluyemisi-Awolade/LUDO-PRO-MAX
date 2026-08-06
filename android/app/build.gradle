@@ -5,9 +5,19 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def keystorePropertiesFile = rootProject.file('key.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace "com.ludopromax.app"
-    compileSdk 34
+    // FIX: bumped from 34 to 36. Google Play Console is currently
+    // requiring new app submissions to target API level 36 (Android 16)
+    // — the old targetSdkVersion 33 below would have been auto-rejected
+    // at upload.
+    compileSdk 36
     ndkVersion "25.1.8937393"
 
     compileOptions {
@@ -26,16 +36,38 @@ android {
     defaultConfig {
         applicationId "com.ludopromax.app"
         minSdkVersion 21
-        targetSdkVersion 33
-        compileSdkVersion 34
+        targetSdkVersion 36
+        compileSdkVersion 36
         versionCode 1
         versionName "2.0.0"
         multiDexEnabled true
     }
 
+    // FIX: real signing config for release builds. Reads from
+    // android/key.properties, which is NOT committed to the repo — CI
+    // writes it from a GitHub secret before building (see workflow).
+    // Falls back to the debug config automatically if key.properties
+    // isn't present yet, so this won't break your existing pipeline
+    // before the keystore secret is set up.
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                storePassword keystoreProperties['storePassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // FIX: was hardcoded to signingConfigs.debug (the shared
+            // Android debug key) — not acceptable for a real Play Store
+            // release. Now uses the real release config once
+            // key.properties exists, otherwise safely falls back to debug
+            // so local/CI builds keep working in the meantime.
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

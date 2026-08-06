@@ -11,6 +11,7 @@ import 'colour_picker_screen.dart';
 import 'tournament_screen.dart';
 import 'leaderboard_screen.dart';
 import 'login_screen.dart';
+import 'how_to_play_screen.dart';
 
 class MenuScreen extends ConsumerWidget {
   const MenuScreen({super.key});
@@ -40,7 +41,23 @@ class MenuScreen extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            AppHeader(title: 'Ludo Pro Max'),
+            AppHeader(
+              title: 'Ludo Pro Max',
+              // NEW: "How to Play" entry point, top-right of the header —
+              // matches the existing AppHeader(actions: ...) pattern used
+              // elsewhere in the app.
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.help_outline_rounded, size: 20),
+                  color: Colors.white70,
+                  tooltip: 'How to Play',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const HowToPlayScreen()),
+                  ),
+                ),
+              ],
+            ),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),

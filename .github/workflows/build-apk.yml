@@ -44,13 +44,6 @@ jobs:
           retention-days: 30
 
       # ── Play Store build (only runs once KEYSTORE_BASE64 secret exists) ──
-      # FIX: GitHub Actions doesn't reliably allow `secrets.X` directly
-      # inside an `if:` condition, even wrapped in ${{ }} — it threw
-      # "Unrecognized named-value: 'secrets'" on every conditional step
-      # below. The fix: check the secret's presence in a normal script
-      # step (secrets ARE fine inside `env:` / `run:`), write the result
-      # to a step output, then have later steps check THAT output instead
-      # of touching `secrets` inside `if:` at all.
       - name: Check for keystore secret
         id: keystore_check
         env:
@@ -72,6 +65,25 @@ jobs:
           keyAlias=${{ secrets.KEY_ALIAS }}
           storeFile=upload-keystore.jks
           EOF
+
+      # DIAGNOSTIC: proves — before Gradle even touches it — whether the
+      # decoded keystore file + password actually work together. If THIS
+      # step fails with the same padding error, the problem is corrupted/
+      # mismatched secrets (base64, password, or alias). If THIS step
+      # passes but Gradle still fails afterward, the problem is somewhere
+      # in how Gradle reads key.properties instead.
+      - name: Verify keystore is readable (diagnostic)
+        if: steps.keystore_check.outputs.has_keystore == 'true'
+        run: |
+          echo "Keystore file size:"
+          ls -la android/app/upload-keystore.jks
+          echo "Attempting to list keystore contents with the stored password..."
+          keytool -list -v \
+            -keystore android/app/upload-keystore.jks \
+            -alias "${{ secrets.KEY_ALIAS }}" \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            | grep -E "Alias name|Valid from|SHA256"
+          echo "✅ Keystore is valid and password/alias are correct."
 
       - name: Build App Bundle (Play Store)
         if: steps.keystore_check.outputs.has_keystore == 'true'

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_app_check/firebase_app_check.dart';
 import '../game/game_state.dart';
 
 // Set these via --dart-define or a .env loader at build time.
@@ -13,6 +14,26 @@ const _kAuthBase = 'https://identitytoolkit.googleapis.com/v1/accounts';
 final firebaseServiceProvider = Provider((ref) => FirebaseService());
 
 class FirebaseService {
+  // NEW: every request now carries an App Check token, proving it came
+  // from this real app (not a hand-crafted script hitting the REST API
+  // directly). This is fetched fresh per-request since App Check tokens
+  // are short-lived and the SDK caches/refreshes them internally, so this
+  // call is cheap in practice. If the token fetch fails for any reason,
+  // requests still go out without it rather than blocking the user —
+  // App Check is currently in monitoring mode (unenforced) in the
+  // Firebase console, so this is safe; once enforcement is turned on for
+  // Realtime Database, a missing token will be rejected server-side.
+  Future<Map<String, String>> _headers() async {
+    final headers = {'Content-Type': 'application/json'};
+    try {
+      final token = await FirebaseAppCheck.instance.getToken();
+      if (token != null) headers['X-Firebase-AppCheck'] = token;
+    } catch (e) {
+      debugPrint('App Check token fetch failed: $e');
+    }
+    return headers;
+  }
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>?> signIn(String email, String pw) =>
       _authReq('signInWithPassword', email, pw);
@@ -24,7 +45,7 @@ class FirebaseService {
     try {
       final res = await http.post(
         Uri.parse('$_kAuthBase:$ep?key=$_kApiKey'),
-        headers: {'Content-Type': 'application/json'},
+        headers: await _headers(),
         body: jsonEncode({'email': email, 'password': pw, 'returnSecureToken': true}),
       );
       return jsonDecode(res.body) as Map<String, dynamic>;
@@ -72,6 +93,7 @@ class FirebaseService {
     try {
       final res = await http.get(
         Uri.parse('$_kDbUrl/$path.json?auth=$tok'),
+        headers: await _headers(),
       );
       if (res.statusCode != 200) return null;
       final body = jsonDecode(res.body);
@@ -86,7 +108,7 @@ class FirebaseService {
     try {
       await http.put(
         Uri.parse('$_kDbUrl/$path.json?auth=$tok'),
-        headers: {'Content-Type': 'application/json'},
+        headers: await _headers(),
         body: jsonEncode(data),
       );
     } catch (e) {
@@ -98,7 +120,7 @@ class FirebaseService {
     try {
       await http.patch(
         Uri.parse('$_kDbUrl/$path.json?auth=$tok'),
-        headers: {'Content-Type': 'application/json'},
+        headers: await _headers(),
         body: jsonEncode(data),
       );
     } catch (e) {

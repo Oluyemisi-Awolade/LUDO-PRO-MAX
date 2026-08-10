@@ -86,3 +86,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
 }
+
+// NEW: processes google-services.json — required for firebase_core /
+// firebase_app_check to initialize correctly.
+apply plugin: 'com.google.gms.google-services'

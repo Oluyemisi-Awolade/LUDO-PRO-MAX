@@ -28,6 +28,10 @@ dependencies:
   url_launcher: ^6.2.2
   http: ^1.2.1
 
+  # Security — verifies requests come from the real, untampered app
+  firebase_core: ^2.32.0
+  firebase_app_check: ^0.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

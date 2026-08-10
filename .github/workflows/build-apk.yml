@@ -44,13 +44,26 @@ jobs:
           retention-days: 30
 
       # ── Play Store build (only runs once KEYSTORE_BASE64 secret exists) ──
-      # NOTE: this step and the one below are silently skipped until you've
-      # generated a keystore (see generate-keystore.yml) and added the
-      # KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD
-      # secrets in GitHub. Nothing here breaks your existing APK build in
-      # the meantime.
+      # FIX: GitHub Actions doesn't reliably allow `secrets.X` directly
+      # inside an `if:` condition, even wrapped in ${{ }} — it threw
+      # "Unrecognized named-value: 'secrets'" on every conditional step
+      # below. The fix: check the secret's presence in a normal script
+      # step (secrets ARE fine inside `env:` / `run:`), write the result
+      # to a step output, then have later steps check THAT output instead
+      # of touching `secrets` inside `if:` at all.
+      - name: Check for keystore secret
+        id: keystore_check
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Decode upload keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: steps.keystore_check.outputs.has_keystore == 'true'
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
           cat > android/key.properties <<EOF
@@ -61,14 +74,14 @@ jobs:
           EOF
 
       - name: Build App Bundle (Play Store)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: steps.keystore_check.outputs.has_keystore == 'true'
         run: |
           flutter build appbundle --release \
             --dart-define=FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }} \
             --dart-define=FIREBASE_DB_URL=${{ secrets.FIREBASE_DB_URL }}
 
       - name: Upload AAB artifact
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: steps.keystore_check.outputs.has_keystore == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ludo-pro-max-aab

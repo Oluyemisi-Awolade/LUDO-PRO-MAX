@@ -71,6 +71,16 @@ class GameState {
   bool get diceRolled => dice1 > 0 || dice2 > 0;
 
   bool get isPlayerTurn => currentTurn == playerIndex;
+
+  // FIX: local multiplayer is pass-and-play on ONE shared device — there's
+  // no single "your color" restriction the way there is for vsBot (the
+  // bot plays other colors) or Online (each phone only controls its own
+  // color). isPlayerTurn alone made the Roll button permanently disabled
+  // the moment the turn passed to any color other than the one that set
+  // up the game. This getter is what the UI should actually check.
+  bool get canCurrentPlayerAct =>
+      mode == GameMode.localMultiplayer || isPlayerTurn;
+
   bool get gameOver => winner != null;
 
   // FIX: movable tokens are now the union of what dice1 alone can move

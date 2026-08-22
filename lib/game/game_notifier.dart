@@ -140,15 +140,30 @@ class GameNotifier extends StateNotifier<GameState> {
     );
     await _syncRoom();
 
-    final playerTokens = state.tokens[state.playerIndex];
+    // FIX (#turn-stuck / local play): this must check whoever's turn it
+    // ACTUALLY is (state.currentTurn), not state.playerIndex (which is
+    // fixed at whichever colour originally set up the game). In vsBot and
+    // online, currentTurn == playerIndex is already guaranteed whenever
+    // rollDice() runs (the UI only lets the human roll on their own
+    // turn), so this is a no-op for those modes. In LOCAL pass-and-play,
+    // currentTurn cycles through every colour on the same device, but
+    // this was still evaluating the setup player's (red's) tokens no
+    // matter whose turn it was. So once it was, say, green's turn and
+    // green's tokens genuinely had no legal move for that roll, the game
+    // silently checked red's tokens instead, never detected "no move",
+    // and never called _advanceTurn() — dice stuck on screen, no sound,
+    // no button, forever. Same root cause explained the 3-sixes freeze:
+    // whichever player actually rolled 3 sixes in a row was never the
+    // one being checked here if they weren't the setup player.
+    final playerTokens = state.tokens[state.currentTurn];
     if (playerTokens == null) return;
 
     // A move is possible this turn if EITHER die can move something
     final movesD1 = state.dice1 > 0
-        ? movableTokens(state.playerIndex, playerTokens, d1)
+        ? movableTokens(state.currentTurn, playerTokens, d1)
         : <int>[];
     final movesD2 = (state.twoDiceMode && state.dice2 > 0)
-        ? movableTokens(state.playerIndex, playerTokens, d2)
+        ? movableTokens(state.currentTurn, playerTokens, d2)
         : <int>[];
 
     if (movesD1.isEmpty && movesD2.isEmpty) {

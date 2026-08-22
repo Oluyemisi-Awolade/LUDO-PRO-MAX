@@ -59,7 +59,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _roll() async {
     final gs = ref.read(gameProvider);
-    if (!gs.isPlayerTurn || gs.diceRolled || gs.gameOver) return;
+    if (!gs.canCurrentPlayerAct || gs.diceRolled || gs.gameOver) return;
     await ref.read(gameProvider.notifier).rollDice();
   }
 
@@ -215,17 +215,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _checkGameOver(gs);
     _syncWaitingSound(gs);
 
-    final canRoll  = gs.isPlayerTurn && !gs.diceRolled && !gs.gameOver;
+    final canRoll  = gs.canCurrentPlayerAct && !gs.diceRolled && !gs.gameOver;
 
     String rollLabel;
     Color  rollColor;
     if (gs.gameOver) {
       rollLabel = '🏆 ${kPlayerNames[gs.winner!]} Wins!';
       rollColor = Colors.green.shade700;
-    } else if (gs.isPlayerTurn && !gs.diceRolled) {
+    } else if (gs.canCurrentPlayerAct && !gs.diceRolled) {
       rollLabel = '🎲 Roll Dice';
       rollColor = AppColors.violet;
-    } else if (gs.isPlayerTurn && gs.diceRolled) {
+    } else if (gs.canCurrentPlayerAct && gs.diceRolled) {
       rollLabel = '👆 Tap your token';
       rollColor = Colors.orange.shade700;
     } else {

@@ -487,7 +487,13 @@ class GameNotifier extends StateNotifier<GameState> {
   Future<String> createRoom({bool twoDice = false}) async {
     final code = (100000 + _rng.nextInt(899999)).toString();
     final ud = state.userData!;
-    await _fb.putRoom(
+    // FIX: putRoom now returns whether the write actually succeeded.
+    // Previously this was fire-and-forget, so a rules-rejected write
+    // (e.g. locked ".write": false rules) went unnoticed here — the
+    // code below would still run, showing a room code and "Waiting for
+    // players…" even though nothing was ever saved, which is exactly
+    // why joiners got "Room not found" for a code that looked valid.
+    final ok = await _fb.putRoom(
         code,
         {
           'players': {'0': ud.displayName},
@@ -507,6 +513,11 @@ class GameNotifier extends StateNotifier<GameState> {
           'chat': {},
         },
         ud.idToken ?? '');
+
+    if (!ok) {
+      throw Exception(
+          'Could not create room — check your connection and try again.');
+    }
 
     state = state.copyWith(
       roomId: code,

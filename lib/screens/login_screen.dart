@@ -108,6 +108,73 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  // NEW: "Forgot password?" flow. Pre-fills whatever the user already
+  // typed into the email field (if anything), lets them confirm/edit it,
+  // then calls FirebaseService.sendPasswordReset. The confirmation
+  // message is intentionally the same whether or not the email exists
+  // in the system, so this can't be used to probe registered emails.
+  Future<void> _forgotPassword() async {
+    final ctrl = TextEditingController(text: _emailCtrl.text.trim());
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Reset password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your account email. We\'ll send a link to set a new password.',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email_outlined, color: Colors.white38, size: 18),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(ctrl.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.violet),
+            child: const Text('Send Reset Link'),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null || email.isEmpty) return;
+
+    setState(() => _loading = true);
+    try {
+      final fb = ref.read(firebaseServiceProvider);
+      await fb.sendPasswordReset(email);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+
+    if (!mounted) return;
+    // Same message regardless of success/failure/email-exists — avoids
+    // leaking which emails are registered, and a network hiccup here
+    // shouldn't read as "that email is wrong."
+    showSnack(
+      context,
+      'If an account exists for that email, a reset link has been sent.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,7 +219,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   prefixIcon: Icon(Icons.lock_outline_rounded, color: Colors.white38, size: 18),
                 ),
               ).animate().fadeIn(delay: 480.ms).slideY(begin: 0.15, end: 0),
-              const SizedBox(height: 24),
+
+              // NEW: Forgot password link, right-aligned under the
+              // password field (standard placement for this pattern).
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _loading ? null : _forgotPassword,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Forgot password?',
+                      style: TextStyle(color: Colors.white54, fontSize: 12.5)),
+                ),
+              ).animate().fadeIn(delay: 520.ms),
+              const SizedBox(height: 12),
 
               if (_loading) ...[
                 const CircularProgressIndicator(color: AppColors.violet),

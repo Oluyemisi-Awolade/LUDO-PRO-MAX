@@ -487,6 +487,13 @@ class GameNotifier extends StateNotifier<GameState> {
   Future<String> createRoom({bool twoDice = false}) async {
     final code = (100000 + _rng.nextInt(899999)).toString();
     final ud = state.userData!;
+    // FIX: colour is now assigned randomly (0-3) rather than using
+    // whatever state.playerColorIndex happened to default to, so the
+    // creator's seat colour varies room to room instead of always
+    // being the same one.
+    final myColor = _rng.nextInt(4);
+    final mySlot = myColor.toString();
+
     // FIX: putRoom now returns whether the write actually succeeded.
     // Previously this was fire-and-forget, so a rules-rejected write
     // (e.g. locked ".write": false rules) went unnoticed here — the
@@ -496,12 +503,11 @@ class GameNotifier extends StateNotifier<GameState> {
     final ok = await _fb.putRoom(
         code,
         {
-          'players': {'0': ud.displayName},
-          'colors': {'0': state.playerColorIndex},
+          'players': {mySlot: ud.displayName},
+          'colors': {mySlot: myColor},
           'tokens': {
-            '0': kNestPositions[state.playerColorIndex]
-                .map((p) => List<int>.from(p))
-                .toList(),
+            mySlot:
+                kNestPositions[myColor].map((p) => List<int>.from(p)).toList(),
           },
           'current_turn': 0,
           'dice1': 0,
@@ -521,16 +527,16 @@ class GameNotifier extends StateNotifier<GameState> {
 
     state = state.copyWith(
       roomId: code,
-      playerIndex: state.playerColorIndex,
+      playerColorIndex: myColor,
+      playerIndex: myColor,
       mode: GameMode.online,
       twoDiceMode: twoDice,
       status: GameStatus.waiting,
+      numPlayers: 1, // FIX: keeps turn-cycling math correct as joiners land
       tokens: {
-        state.playerColorIndex: kNestPositions[state.playerColorIndex]
-            .map((p) => List<int>.from(p))
-            .toList(),
+        myColor: kNestPositions[myColor].map((p) => List<int>.from(p)).toList(),
       },
-      playerNames: {state.playerColorIndex: ud.displayName},
+      playerNames: {myColor: ud.displayName},
     );
     _startPoll();
     return code;
@@ -540,23 +546,36 @@ class GameNotifier extends StateNotifier<GameState> {
     final ud = state.userData!;
     final room = await _fb.getRoom(code, ud.idToken ?? '');
     if (room == null) return (false, 'Room not found');
+    if (room['state'] == 'playing') {
+      return (false, 'Game already in progress');
+    }
+
     final players = Map<String, dynamic>.from(room['players'] as Map? ?? {});
     final colors = Map<String, dynamic>.from(room['colors'] as Map? ?? {});
-    if (colors.values.contains(state.playerColorIndex)) {
-      return (
-        false,
-        'Colour ${kPlayerNames[state.playerColorIndex]} is taken'
-      );
-    }
     if (players.length >= 4) return (false, 'Room is full');
-    final myColor = state.playerColorIndex.toString();
-    players[myColor] = ud.displayName;
-    colors[myColor] = state.playerColorIndex;
+
+    // FIX: assign a random *unused* colour from this room, instead of
+    // using this device's local playerColorIndex (which defaults the
+    // same way on every fresh device and caused collisions), and
+    // instead of a fixed sequential seat order — colours should land
+    // randomly among whichever ones are still free.
+    final takenColors = colors.values.map((v) => v as int).toSet();
+    final availableColors =
+        [0, 1, 2, 3].where((c) => !takenColors.contains(c)).toList();
+    if (availableColors.isEmpty) return (false, 'Room is full');
+    final myColor = availableColors[_rng.nextInt(availableColors.length)];
+    final mySlot = myColor.toString();
+
+    players[mySlot] = ud.displayName;
+    colors[mySlot] = myColor;
     final tokens = Map<String, dynamic>.from(room['tokens'] as Map? ?? {});
-    tokens[myColor] = kNestPositions[state.playerColorIndex]
-        .map((p) => List<int>.from(p))
-        .toList();
-    final newState = players.length == 4 ? 'playing' : 'waiting';
+    tokens[mySlot] =
+        kNestPositions[myColor].map((p) => List<int>.from(p)).toList();
+
+    // FIX: start once 2+ players have joined instead of requiring a
+    // full table of 4, per product decision.
+    final newState = players.length >= 2 ? 'playing' : 'waiting';
+
     await _fb.patchRoom(
         code,
         {
@@ -576,7 +595,9 @@ class GameNotifier extends StateNotifier<GameState> {
     };
     state = state.copyWith(
       roomId: code,
-      playerIndex: state.playerColorIndex,
+      playerColorIndex: myColor,
+      playerIndex: myColor,
+      numPlayers: players.length, // FIX: keeps % state.numPlayers turn math correct
       mode: GameMode.online,
       twoDiceMode: room['two_dice_mode'] as bool? ?? false,
       playerNames: pMap,
@@ -638,6 +659,7 @@ class GameNotifier extends StateNotifier<GameState> {
       dice2: (room['dice2'] as num?)?.toInt() ?? 0,
       winner: room['winner'] as int?,
       playerNames: players,
+      numPlayers: players.isNotEmpty ? players.length : state.numPlayers, // FIX: keep turn math in sync as more players join mid-poll
       finishedPlayers: finished,
       chatMessages: chats,
       status:

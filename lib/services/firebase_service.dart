@@ -14,15 +14,6 @@ const _kAuthBase = 'https://identitytoolkit.googleapis.com/v1/accounts';
 final firebaseServiceProvider = Provider((ref) => FirebaseService());
 
 class FirebaseService {
-  // NEW: every request now carries an App Check token, proving it came
-  // from this real app (not a hand-crafted script hitting the REST API
-  // directly). This is fetched fresh per-request since App Check tokens
-  // are short-lived and the SDK caches/refreshes them internally, so this
-  // call is cheap in practice. If the token fetch fails for any reason,
-  // requests still go out without it rather than blocking the user —
-  // App Check is currently in monitoring mode (unenforced) in the
-  // Firebase console, so this is safe; once enforcement is turned on for
-  // Realtime Database, a missing token will be rejected server-side.
   Future<Map<String, String>> _headers() async {
     final headers = {'Content-Type': 'application/json'};
     try {
@@ -55,6 +46,32 @@ class FirebaseService {
     }
   }
 
+  // NEW: sends a "reset your password" email for the given address via
+  // Firebase's sendOobCode endpoint. Returns true only on a real 200 from
+  // Identity Toolkit; false covers both network failures and API-level
+  // errors (e.g. malformed email), which the UI should treat identically
+  // ("if that email exists, a reset link has been sent") so email
+  // enumeration isn't possible from the response alone.
+  Future<bool> sendPasswordReset(String email) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_kAuthBase:sendOobCode?key=$_kApiKey'),
+        headers: await _headers(),
+        body: jsonEncode({
+          'requestType': 'PASSWORD_RESET',
+          'email': email,
+        }),
+      );
+      if (res.statusCode != 200) {
+        debugPrint('Password reset error: ${res.statusCode} ${res.body}');
+      }
+      return res.statusCode == 200;
+    } catch (e) {
+      debugPrint('Password reset error: $e');
+      return false;
+    }
+  }
+
   // ── User data ─────────────────────────────────────────────────────────────
   Future<Map<dynamic, dynamic>?> getUser(String uid, String tok) =>
       _get('users/$uid', tok);
@@ -68,20 +85,27 @@ class FirebaseService {
   Future<Map<dynamic, dynamic>?> getRoom(String code, String tok) =>
       _get('rooms/$code', tok);
 
-  Future<void> putRoom(String code, Map<String, dynamic> data, String tok) =>
+  // FIX: putRoom/patchRoom now return whether the write actually
+  // succeeded (based on HTTP status), instead of a fire-and-forget void.
+  // Previously a rules-rejected write (403/401, or any non-2xx) was
+  // swallowed silently — the caller (createRoom in game_notifier.dart)
+  // would generate a room code and show "Waiting for players…" even
+  // though nothing was ever written to the database, which is exactly
+  // what caused "Room not found" for joiners: there was no room to find.
+  Future<bool> putRoom(String code, Map<String, dynamic> data, String tok) =>
       _put('rooms/$code', data, tok);
 
-  Future<void> patchRoom(String code, Map<String, dynamic> data, String tok) =>
+  Future<bool> patchRoom(String code, Map<String, dynamic> data, String tok) =>
       _patch('rooms/$code', data, tok);
 
   // ── Tournaments ───────────────────────────────────────────────────────────
   Future<Map<dynamic, dynamic>?> getTournaments(String tok) =>
       _get('tournaments', tok);
 
-  Future<void> putTournament(String tid, Map<String, dynamic> data, String tok) =>
+  Future<bool> putTournament(String tid, Map<String, dynamic> data, String tok) =>
       _put('tournaments/$tid', data, tok);
 
-  Future<void> joinTournament(String tid, String uid, Map<String, dynamic> data, String tok) =>
+  Future<bool> joinTournament(String tid, String uid, Map<String, dynamic> data, String tok) =>
       _patch('tournaments/$tid/players/$uid', data, tok);
 
   // ── Leaderboard ───────────────────────────────────────────────────────────
@@ -95,7 +119,10 @@ class FirebaseService {
         Uri.parse('$_kDbUrl/$path.json?auth=$tok'),
         headers: await _headers(),
       );
-      if (res.statusCode != 200) return null;
+      if (res.statusCode != 200) {
+        debugPrint('FB GET $path failed: ${res.statusCode} ${res.body}');
+        return null;
+      }
       final body = jsonDecode(res.body);
       return body is Map ? body : null;
     } catch (e) {
@@ -104,27 +131,44 @@ class FirebaseService {
     }
   }
 
-  Future<void> _put(String path, Map<String, dynamic> data, String tok) async {
+  // FIX: was fire-and-forget (Future<void>) and never inspected the
+  // response, so a rules-rejected write (e.g. ".write": false) looked
+  // identical to a successful one from the caller's perspective — no
+  // exception is thrown for an HTTP 401/403, only for network-level
+  // failures. Now returns true only for a genuine 2xx.
+  Future<bool> _put(String path, Map<String, dynamic> data, String tok) async {
     try {
-      await http.put(
+      final res = await http.put(
         Uri.parse('$_kDbUrl/$path.json?auth=$tok'),
         headers: await _headers(),
         body: jsonEncode(data),
       );
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        debugPrint('FB PUT $path failed: ${res.statusCode} ${res.body}');
+        return false;
+      }
+      return true;
     } catch (e) {
       debugPrint('FB PUT error: $e');
+      return false;
     }
   }
 
-  Future<void> _patch(String path, Map<String, dynamic> data, String tok) async {
+  Future<bool> _patch(String path, Map<String, dynamic> data, String tok) async {
     try {
-      await http.patch(
+      final res = await http.patch(
         Uri.parse('$_kDbUrl/$path.json?auth=$tok'),
         headers: await _headers(),
         body: jsonEncode(data),
       );
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        debugPrint('FB PATCH $path failed: ${res.statusCode} ${res.body}');
+        return false;
+      }
+      return true;
     } catch (e) {
       debugPrint('FB PATCH error: $e');
+      return false;
     }
   }
 }

@@ -44,6 +44,13 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
       return;
     }
     setState(() => _loading = true);
+    // FIX: joinRoom() reads room data from Firebase and parses several
+    // maps out of it (players/colors/tokens). Any unexpected shape or
+    // network hiccup there throws — previously that exception had
+    // nothing catching it here, so it propagated up silently: the
+    // `finally` below still ran (button re-enabled, loading spinner
+    // gone) but the user never saw why the join didn't happen. Now any
+    // such error surfaces as a SnackBar instead of a silent reset.
     try {
       final (ok, msg) = await ref.read(gameProvider.notifier).joinRoom(code);
       if (!mounted) return;
@@ -53,6 +60,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
         );
       } else {
         showSnack(context, msg, color: Colors.red.shade700);
+      }
+    } catch (e) {
+      if (mounted) {
+        showSnack(context, 'Could not join room: $e', color: Colors.red.shade700);
       }
     } finally {
       if (mounted) setState(() => _loading = false);

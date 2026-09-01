@@ -25,6 +25,31 @@ class GameNotifier extends StateNotifier<GameState> {
   AudioService get _audio => _ref.read(audioServiceProvider);
   FirebaseService get _fb => _ref.read(firebaseServiceProvider);
 
+  // FIX (online join/poll bug): Firebase RTDB's REST API silently returns
+  // small-integer-keyed objects ("0","1","2"...) as a JSON ARRAY instead
+  // of a JSON object. players/colors/tokens are all keyed by color index
+  // (0-3), so a read of these paths can come back as either a Map or a
+  // List depending on which slots happen to be filled. The old code did
+  // `room['colors'] as Map?`, which throws a runtime type error the
+  // instant Firebase hands back a List — this was happening inside
+  // joinRoom() BEFORE the patchRoom() call that adds the second player,
+  // so joins were failing silently (no catch around the call in
+  // lobby_screen.dart, so no error surfaced) and rooms stayed stuck on
+  // "waiting" forever. This normalizes either shape into a
+  // Map<String, dynamic> keyed by index string. Local play and vsBot
+  // never touch this — it's only used in joinRoom/_pollRoom below.
+  Map<String, dynamic> _asIndexMap(dynamic raw) {
+    if (raw is Map) return raw.map((k, v) => MapEntry(k.toString(), v));
+    if (raw is List) {
+      final out = <String, dynamic>{};
+      for (int i = 0; i < raw.length; i++) {
+        if (raw[i] != null) out[i.toString()] = raw[i];
+      }
+      return out;
+    }
+    return {};
+  }
+
   // —— Setup ——
   void setupGame({
     required GameMode mode,
@@ -550,8 +575,18 @@ class GameNotifier extends StateNotifier<GameState> {
       return (false, 'Game already in progress');
     }
 
-    final players = Map<String, dynamic>.from(room['players'] as Map? ?? {});
-    final colors = Map<String, dynamic>.from(room['colors'] as Map? ?? {});
+    // FIX (online join bug): was `Map<String, dynamic>.from(room['players']
+    // as Map? ?? {})`. Firebase RTDB's REST API silently returns small-
+    // integer-keyed objects ("0","1","2"...) as a JSON ARRAY instead of a
+    // JSON object — and players/colors/tokens are keyed by color index, so
+    // this cast could throw a runtime type error the moment a room had,
+    // say, only slot "2" filled. That exception was being thrown BEFORE
+    // the patchRoom() call below that actually adds the joining player,
+    // so joins were failing silently (no catch around this in
+    // lobby_screen.dart) and rooms stayed stuck on "waiting" forever with
+    // no error shown to the user. _asIndexMap normalizes either shape.
+    final players = _asIndexMap(room['players']);
+    final colors = _asIndexMap(room['colors']);
     if (players.length >= 4) return (false, 'Room is full');
 
     // FIX: assign a random *unused* colour from this room, instead of
@@ -568,7 +603,8 @@ class GameNotifier extends StateNotifier<GameState> {
 
     players[mySlot] = ud.displayName;
     colors[mySlot] = myColor;
-    final tokens = Map<String, dynamic>.from(room['tokens'] as Map? ?? {});
+    // FIX: same array-vs-map normalization for tokens (see _asIndexMap note above).
+    final tokens = _asIndexMap(room['tokens']);
     tokens[mySlot] =
         kNestPositions[myColor].map((p) => List<int>.from(p)).toList();
 
@@ -625,19 +661,20 @@ class GameNotifier extends StateNotifier<GameState> {
     final room = await _fb.getRoom(state.roomId!, state.userData!.idToken!);
     if (room == null) return;
     final tokens = <int, List<List<int>>>{};
-    final rawT = room['tokens'] as Map?;
-    if (rawT != null) {
-      for (final e in rawT.entries) {
-        tokens[int.parse(e.key.toString())] =
-            (e.value as List).map((r) => List<int>.from(r as List)).toList();
-      }
+    // FIX: was `room['tokens'] as Map?` guarded by an `if (rawT != null)`.
+    // Same array-vs-map issue as joinRoom — _asIndexMap always returns a
+    // (possibly empty) Map, so this loop is now safe regardless of which
+    // shape Firebase returned, and the null guard is no longer needed.
+    final rawT = _asIndexMap(room['tokens']);
+    for (final e in rawT.entries) {
+      tokens[int.parse(e.key.toString())] =
+          (e.value as List).map((r) => List<int>.from(r as List)).toList();
     }
     final players = <int, String>{};
-    final rawP = room['players'] as Map?;
-    if (rawP != null) {
-      for (final e in rawP.entries) {
-        players[int.parse(e.key.toString())] = e.value.toString();
-      }
+    // FIX: same normalization as above, for the same reason.
+    final rawP = _asIndexMap(room['players']);
+    for (final e in rawP.entries) {
+      players[int.parse(e.key.toString())] = e.value.toString();
     }
     final finished = ((room['finished_players'] as List?) ?? [])
         .map((e) => e as int)

@@ -22,6 +22,15 @@ class GameNotifier extends StateNotifier<GameState> {
   bool _moveLock = false;
   int _gameSession = 0; // bumped every setupGame(); invalidates stale timers
 
+  // FIX (online move/poll race): bumped every time a local move is applied
+  // in online mode. _pollRoom() snapshots this before its network GET and
+  // checks it again after — if a local move happened mid-flight, the GET's
+  // result is now stale (older than what's on screen) and is discarded
+  // instead of being applied, which is what was causing a moved token to
+  // visibly snap back and then re-move a moment later. Local/vsBot modes
+  // never touch this.
+  int _localMoveSeq = 0;
+
   AudioService get _audio => _ref.read(audioServiceProvider);
   FirebaseService get _fb => _ref.read(firebaseServiceProvider);
 
@@ -215,6 +224,12 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   Future<bool> _doMove(int player, int tokenIdx, {int dieChoice = 1}) async {
+    // FIX (online move/poll race): mark that a local move is happening
+    // in online mode BEFORE any awaits below, so a poll GET that was
+    // already in flight when this move started is recognized as stale
+    // once it comes back (see _pollRoom). No effect on local/vsBot.
+    if (state.mode == GameMode.online) _localMoveSeq++;
+
     final d1 = state.dice1;
     final d2 = state.dice2;
     final steps = (dieChoice == 2 && state.twoDiceMode) ? d2 : d1;
@@ -393,6 +408,10 @@ class GameNotifier extends StateNotifier<GameState> {
   // —— Turn management ——
   Future<void> _advanceTurn() async {
     if (state.gameOver) return;
+    // FIX (online move/poll race): advancing the turn also mutates
+    // state that a stale poll could clobber (currentTurn, dice, bonus
+    // counters), so this counts as a "local move" too.
+    if (state.mode == GameMode.online) _localMoveSeq++;
     int nxt = (state.currentTurn + 1) % state.numPlayers;
     int loops = 0;
     while (state.finishedPlayers.contains(nxt) && loops < state.numPlayers) {
@@ -512,11 +531,13 @@ class GameNotifier extends StateNotifier<GameState> {
   Future<String> createRoom({bool twoDice = false}) async {
     final code = (100000 + _rng.nextInt(899999)).toString();
     final ud = state.userData!;
-    // FIX: colour is now assigned randomly (0-3) rather than using
-    // whatever state.playerColorIndex happened to default to, so the
-    // creator's seat colour varies room to room instead of always
-    // being the same one.
-    final myColor = _rng.nextInt(4);
+    // FIX (color-not-honored bug): this used to be
+    // `_rng.nextInt(4)` — a random color, chosen without any regard
+    // for whatever the player actually picked on the color-select
+    // screen. state.playerColorIndex is set via setPlayerColor() before
+    // createRoom() is called, so it reflects the player's real choice;
+    // use that instead.
+    final myColor = state.playerColorIndex;
     final mySlot = myColor.toString();
 
     // FIX: putRoom now returns whether the write actually succeeded.
@@ -589,16 +610,22 @@ class GameNotifier extends StateNotifier<GameState> {
     final colors = _asIndexMap(room['colors']);
     if (players.length >= 4) return (false, 'Room is full');
 
-    // FIX: assign a random *unused* colour from this room, instead of
-    // using this device's local playerColorIndex (which defaults the
-    // same way on every fresh device and caused collisions), and
-    // instead of a fixed sequential seat order — colours should land
-    // randomly among whichever ones are still free.
+    // FIX (color-not-honored bug): was
+    // `availableColors[_rng.nextInt(availableColors.length)]` — always
+    // random, regardless of what the joining player actually picked on
+    // the color-select screen (state.playerColorIndex). Now the joiner's
+    // chosen color is used whenever it's still free; only when someone
+    // else already claimed that exact color does this fall back to a
+    // random one from what's left, and the returned message says so.
     final takenColors = colors.values.map((v) => v as int).toSet();
     final availableColors =
         [0, 1, 2, 3].where((c) => !takenColors.contains(c)).toList();
     if (availableColors.isEmpty) return (false, 'Room is full');
-    final myColor = availableColors[_rng.nextInt(availableColors.length)];
+    final desired = state.playerColorIndex;
+    final bool desiredFree = availableColors.contains(desired);
+    final myColor = desiredFree
+        ? desired
+        : availableColors[_rng.nextInt(availableColors.length)];
     final mySlot = myColor.toString();
 
     players[mySlot] = ud.displayName;
@@ -642,7 +669,12 @@ class GameNotifier extends StateNotifier<GameState> {
           newState == 'playing' ? GameStatus.playing : GameStatus.waiting,
     );
     _startPoll();
-    return (true, 'Joined!');
+    return (
+      true,
+      desiredFree
+          ? 'Joined!'
+          : '${kPlayerNames[desired]} was taken — you got ${kPlayerNames[myColor]} instead'
+    );
   }
 
   void _startPoll() {
@@ -658,8 +690,17 @@ class GameNotifier extends StateNotifier<GameState> {
 
   Future<void> _pollRoom() async {
     if (state.roomId == null || state.userData?.idToken == null) return;
+    // FIX (online move/poll race): snapshot the sequence counter before
+    // the network round-trip. If a local move bumps it while this GET
+    // is in flight, the response we get back is now older than what's
+    // already on screen (it reflects pre-move state) — applying it would
+    // visibly snap the just-moved token back, until the *next* poll
+    // (1.5s later, reflecting the synced move) corrected it again. That
+    // round trip is exactly the "goes, comes back, goes again" you saw.
+    final pollSeq = _localMoveSeq;
     final room = await _fb.getRoom(state.roomId!, state.userData!.idToken!);
     if (room == null) return;
+    if (pollSeq != _localMoveSeq) return; // stale — a local move happened meanwhile, skip
     final tokens = <int, List<List<int>>>{};
     // FIX: was `room['tokens'] as Map?` guarded by an `if (rawT != null)`.
     // Same array-vs-map issue as joinRoom — _asIndexMap always returns a

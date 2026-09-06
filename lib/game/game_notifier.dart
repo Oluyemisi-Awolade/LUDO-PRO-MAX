@@ -59,6 +59,18 @@ class GameNotifier extends StateNotifier<GameState> {
     return {};
   }
 
+  // FIX (turn-stuck-on-Red bug): online color assignments are whatever
+  // each player actually picked on the colour-select screen (0-3) — they
+  // are NOT guaranteed to be contiguous starting at 0. With two players
+  // choosing, say, Blue(3) and Green(1), a naive `0..numPlayers-1` cycle
+  // (numPlayers=2 -> colors 0,1) lands on color 0 = Red, which nobody
+  // occupies, and the game gets stuck showing "Red's Turn" forever.
+  // This returns the real, sorted list of occupied colors for online
+  // mode so turn-cycling and win-checks always land on someone who
+  // actually exists in the room. Local/vsBot never call this — they
+  // keep their original 0..numPlayers-1 behaviour untouched below.
+  List<int> _onlineOccupiedColors() => state.tokens.keys.toList()..sort();
+
   // —— Setup ——
   void setupGame({
     required GameMode mode,
@@ -323,9 +335,19 @@ class GameNotifier extends StateNotifier<GameState> {
           }
           await _audio.play('win');
         }
+        // FIX (turn-stuck-on-Red bug): "who's still playing" must be
+        // computed over the colors that actually exist in this game.
+        // For online, that's the real occupied colors (e.g. {1,3} for
+        // Green+Blue) — NOT 0..numPlayers-1, which for numPlayers=2
+        // would check colors {0,1} and could falsely conclude color 0
+        // (Red, unoccupied) is "still playing" or miscount who's left.
+        // Local/vsBot keep the exact original 0..numPlayers-1 behaviour.
+        final activeColors = state.mode == GameMode.online
+            ? _onlineOccupiedColors()
+            : List<int>.generate(state.numPlayers, (i) => i);
         final remaining = [
-          for (int i = 0; i < state.numPlayers; i++)
-            if (!finished.contains(i)) i,
+          for (final c in activeColors)
+            if (!finished.contains(c)) c,
         ];
         if (remaining.length <= 1) {
           if (remaining.isNotEmpty &&
@@ -412,12 +434,40 @@ class GameNotifier extends StateNotifier<GameState> {
     // state that a stale poll could clobber (currentTurn, dice, bonus
     // counters), so this counts as a "local move" too.
     if (state.mode == GameMode.online) _localMoveSeq++;
-    int nxt = (state.currentTurn + 1) % state.numPlayers;
-    int loops = 0;
-    while (state.finishedPlayers.contains(nxt) && loops < state.numPlayers) {
-      nxt = (nxt + 1) % state.numPlayers;
-      loops++;
+
+    int nxt;
+    if (state.mode == GameMode.online) {
+      // FIX (turn-stuck-on-Red bug): cycle through the REAL occupied
+      // colors (e.g. Blue=3, Green=1), not a 0..numPlayers-1 range.
+      // The old `(currentTurn + 1) % numPlayers` logic assumed colors
+      // were assigned contiguously starting at 0, which online colors
+      // are not (players freely pick any of the 4). With numPlayers=2
+      // and colors {1,3} chosen, that old math could land on color 0
+      // (Red) or 2, neither of which any device occupies — the game
+      // then shows "Red's Turn" forever with no one able to act.
+      final occupied = _onlineOccupiedColors();
+      if (occupied.isEmpty) return;
+      final curIdx = occupied.indexOf(state.currentTurn);
+      // If currentTurn isn't found (shouldn't normally happen), start
+      // just before index 0 so the loop below lands on occupied[0].
+      int i = curIdx == -1 ? -1 : curIdx;
+      int loops = 0;
+      do {
+        i = (i + 1) % occupied.length;
+        loops++;
+      } while (state.finishedPlayers.contains(occupied[i]) &&
+          loops <= occupied.length);
+      nxt = occupied[i];
+    } else {
+      // Local / vsBot: exact original behaviour, untouched.
+      nxt = (state.currentTurn + 1) % state.numPlayers;
+      int loops = 0;
+      while (state.finishedPlayers.contains(nxt) && loops < state.numPlayers) {
+        nxt = (nxt + 1) % state.numPlayers;
+        loops++;
+      }
     }
+
     state = state.copyWith(
       currentTurn: nxt,
       dice1: 0,
@@ -555,7 +605,13 @@ class GameNotifier extends StateNotifier<GameState> {
             mySlot:
                 kNestPositions[myColor].map((p) => List<int>.from(p)).toList(),
           },
-          'current_turn': 0,
+          // FIX (turn-stuck-on-Red bug): the first turn must belong to
+          // the room creator's ACTUAL color, not a hardcoded 0 (Red).
+          // If the creator picked, say, Blue (3), hardcoding 0 here
+          // meant the game started on a turn that belonged to no one
+          // in the room — nobody could ever roll, and the UI was stuck
+          // showing "Red's Turn" forever.
+          'current_turn': myColor,
           'dice1': 0,
           'dice2': 0,
           'winner': null,
@@ -579,6 +635,7 @@ class GameNotifier extends StateNotifier<GameState> {
       twoDiceMode: twoDice,
       status: GameStatus.waiting,
       numPlayers: 1, // FIX: keeps turn-cycling math correct as joiners land
+      currentTurn: myColor, // FIX: matches the current_turn written above
       tokens: {
         myColor: kNestPositions[myColor].map((p) => List<int>.from(p)).toList(),
       },
@@ -665,6 +722,13 @@ class GameNotifier extends StateNotifier<GameState> {
       twoDiceMode: room['two_dice_mode'] as bool? ?? false,
       playerNames: pMap,
       tokens: tMap,
+      // FIX (turn-stuck-on-Red bug): keep whatever current_turn the room
+      // already has (set correctly by createRoom to the creator's real
+      // color) instead of leaving it defaulted/unset here — the next
+      // _pollRoom() will pick up room['current_turn'] anyway, but this
+      // avoids a one-frame flash of an incorrect value on the joiner's
+      // device between joining and the first poll.
+      currentTurn: (room['current_turn'] as num?)?.toInt() ?? state.currentTurn,
       status:
           newState == 'playing' ? GameStatus.playing : GameStatus.waiting,
     );

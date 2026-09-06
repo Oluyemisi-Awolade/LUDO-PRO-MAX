@@ -233,6 +233,21 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       rollColor = Colors.blueGrey.shade700;
     }
 
+    // FIX (turn-stuck-on-Red / wrong-name-in-strip bug): the player strip
+    // used to loop `for (int i = 0; i < gs.numPlayers; i++)`, which
+    // assumes seats are colors 0..numPlayers-1 in order. That's true for
+    // local/vsBot (colors are always assigned that way), but online
+    // colors are whatever each player actually picked (e.g. Blue=3 and
+    // Green=1 with numPlayers=2) — looping 0,1 would show a chip for
+    // color 0 (Red, unoccupied, falls back to the literal string "Red")
+    // and a chip for color 1 (Green, a real player), producing exactly
+    // the mismatched "Red" chip you saw next to a correctly-named
+    // opponent. For online, iterate the real occupied colors instead;
+    // local/vsBot keep the original 0..numPlayers-1 behaviour untouched.
+    final seatColors = gs.mode == GameMode.online
+        ? (gs.tokens.keys.toList()..sort())
+        : List<int>.generate(gs.numPlayers, (i) => i);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -286,13 +301,16 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  for (int i = 0; i < gs.numPlayers; i++)
+                  // FIX: iterate seatColors (real occupied colors for
+                  // online; 0..numPlayers-1 for local/vsBot) instead of
+                  // a raw `for (int i = 0; i < gs.numPlayers; i++)`.
+                  for (final c in seatColors)
                     PlayerChip(
-                      index:    i,
-                      name:     gs.playerNames[i] ?? kPlayerNames[i],
-                      active:   i == gs.currentTurn && !gs.gameOver,
-                      finished: gs.finishedPlayers.contains(i),
-                      color:    kPlayerColors[i],
+                      index:    c,
+                      name:     gs.playerNames[c] ?? kPlayerNames[c],
+                      active:   c == gs.currentTurn && !gs.gameOver,
+                      finished: gs.finishedPlayers.contains(c),
+                      color:    kPlayerColors[c],
                     ),
                 ],
               ),

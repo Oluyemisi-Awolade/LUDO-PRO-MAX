@@ -218,8 +218,16 @@ class GameNotifier extends StateNotifier<GameState> {
       state = state.copyWith(dice1: 0, dice2: 0, pendingDice: 0);
       if (state.bonusRolls <= 0) {
         await _advanceTurn();
+      } else {
+        // FIX (online turn/dice desync): banked rolls remain, so we stay
+        // on the same player's turn and never reach _advanceTurn() below
+        // (which is the only place that used to sync this reset). Without
+        // this, the dice1/dice2=0 reset above only ever existed on this
+        // device — Firebase still held the old dice values, and the next
+        // 1.5s poll would fetch them back and re-populate stale dice on
+        // screen. Local/vsBot are unaffected: _syncRoom() no-ops for them.
+        await _syncRoom();
       }
-      // else: banked rolls remain, stay on the same player's turn
     }
   }
 
@@ -397,6 +405,12 @@ class GameNotifier extends StateNotifier<GameState> {
         if (bonus <= 0) {
           await _advanceTurn();
         } else {
+          // FIX (online turn/dice desync): staying on the same player's
+          // turn (bonus banked) means _advanceTurn() — the only other
+          // place that used to sync this reset — never runs. Without
+          // this, Firebase kept the pre-reset dice values and the next
+          // poll would restore stale dice on screen. No-ops off online.
+          await _syncRoom();
           if (state.mode != GameMode.online) _scheduleBotTurn();
         }
       }
@@ -476,6 +490,21 @@ class GameNotifier extends StateNotifier<GameState> {
       bonusRolls: 0,
       sixCount: 0,
     );
+
+    // FIX (online turn snap-back bug): every call site above updates
+    // state.currentTurn locally and returns, but NONE of them used to
+    // push that new currentTurn to Firebase. The room's 'current_turn'
+    // field stayed on the PREVIOUS player indefinitely, since nothing
+    // else ever wrote it. The very next _pollRoom() (1.5s later) would
+    // then fetch that stale value and overwrite the just-advanced local
+    // state back to the old player — visibly snapping the turn indicator
+    // backwards, and the other device's player would never actually get
+    // a turn. _syncRoom() itself already no-ops for local/vsBot
+    // (`if (state.mode != GameMode.online || state.roomId == null)
+    // return;`), so this call is a no-op there and cannot affect Solo vs.
+    // Bot or Local Multiplayer.
+    await _syncRoom();
+
     if (state.mode != GameMode.online) _scheduleBotTurn();
   }
 
@@ -578,9 +607,17 @@ class GameNotifier extends StateNotifier<GameState> {
   }
 
   // —— Online ——
-  Future<String> createRoom({bool twoDice = false}) async {
+  // FEATURE (online player count): mirrors the 2P/3P/4P choice already
+  // offered on the Local Play screen. numPlayers is clamped to [2,4] and
+  // written into the room as 'max_players', which joinRoom() below now
+  // uses to decide room capacity and when to flip the room to 'playing'
+  // — replacing the old hardcoded "cap at 4 / start at 2" behavior. Only
+  // used for the online room this creates; vsBot/local setupGame() is
+  // untouched and still takes its own numPlayers argument separately.
+  Future<String> createRoom({bool twoDice = false, int numPlayers = 4}) async {
     final code = (100000 + _rng.nextInt(899999)).toString();
     final ud = state.userData!;
+    final targetPlayers = numPlayers.clamp(2, 4);
     // FIX (color-not-honored bug): this used to be
     // `_rng.nextInt(4)` — a random color, chosen without any regard
     // for whatever the player actually picked on the color-select
@@ -617,6 +654,7 @@ class GameNotifier extends StateNotifier<GameState> {
           'winner': null,
           'state': 'waiting',
           'two_dice_mode': twoDice,
+          'max_players': targetPlayers, // NEW: room capacity chosen by creator
           'finished_players': [],
           'chat': {},
         },
@@ -665,7 +703,13 @@ class GameNotifier extends StateNotifier<GameState> {
     // no error shown to the user. _asIndexMap normalizes either shape.
     final players = _asIndexMap(room['players']);
     final colors = _asIndexMap(room['colors']);
-    if (players.length >= 4) return (false, 'Room is full');
+    // FEATURE (online player count): rooms created before this feature
+    // (or by any client that omits the field) have no 'max_players' key
+    // — default to 4 so those old rooms behave exactly as before. This
+    // replaces the previous hardcoded `>= 4` cap with the creator's
+    // actual chosen capacity (2, 3, or 4).
+    final maxPlayers = ((room['max_players'] as num?)?.toInt() ?? 4).clamp(2, 4);
+    if (players.length >= maxPlayers) return (false, 'Room is full');
 
     // FIX (color-not-honored bug): was
     // `availableColors[_rng.nextInt(availableColors.length)]` — always
@@ -692,9 +736,13 @@ class GameNotifier extends StateNotifier<GameState> {
     tokens[mySlot] =
         kNestPositions[myColor].map((p) => List<int>.from(p)).toList();
 
-    // FIX: start once 2+ players have joined instead of requiring a
-    // full table of 4, per product decision.
-    final newState = players.length >= 2 ? 'playing' : 'waiting';
+    // FEATURE (online player count): the room now starts once the
+    // creator's CHOSEN capacity is reached (2P room starts at 2, 3P at
+    // 3, 4P at 4) — mirroring how Local Play's numPlayers is fixed
+    // upfront rather than always starting the instant a 2nd player
+    // shows up. This replaces the previous "always start at 2,
+    // regardless of table size" product decision; see the note below.
+    final newState = players.length >= maxPlayers ? 'playing' : 'waiting';
 
     await _fb.patchRoom(
         code,

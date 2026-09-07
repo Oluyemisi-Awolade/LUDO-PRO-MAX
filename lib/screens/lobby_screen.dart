@@ -19,6 +19,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   bool _loading   = false;
   String? _myCode;
 
+  // FEATURE (online player count): mirrors the 2P/3P/4P choice already on
+  // the Local Play screen. Defaults to 4 so behavior for anyone who never
+  // touches the picker matches the old hardcoded "always a 4-player room".
+  int _numPlayers = 4;
+
   @override
   void dispose() {
     _codeCtrl.dispose();
@@ -28,7 +33,9 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   Future<void> _createRoom({bool twoDice = false}) async {
     setState(() => _loading = true);
     try {
-      final code = await ref.read(gameProvider.notifier).createRoom(twoDice: twoDice);
+      final code = await ref
+          .read(gameProvider.notifier)
+          .createRoom(twoDice: twoDice, numPlayers: _numPlayers);
       setState(() => _myCode = code);
     } catch (e) {
       if (mounted) showSnack(context, 'Error: $e', color: Colors.red.shade700);
@@ -74,7 +81,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   Widget build(BuildContext context) {
     final gs = ref.watch(gameProvider);
 
-    // Auto-navigate once room hits 4 players and state becomes playing
+    // FEATURE (online player count): was "Auto-navigate once room hits 4
+    // players and state becomes playing" — the room's start threshold is
+    // now whatever the creator picked (2/3/4), not always 4, so this
+    // navigates whenever the notifier flips status to playing, whatever
+    // that target was. See game_notifier.dart joinRoom()/_pollRoom().
     if (gs.status.name == 'playing' && _myCode != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -110,6 +121,19 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 14),
+
+                          // FEATURE (online player count): 2P/3P/4P picker,
+                          // same shape as Local Play. Locked once a room
+                          // code has been generated — capacity is fixed
+                          // server-side in max_players at creation time, so
+                          // changing it after the fact wouldn't do anything.
+                          _PlayerCountPicker(
+                            value: _numPlayers,
+                            enabled: !_loading && _myCode == null,
+                            onChanged: (n) => setState(() => _numPlayers = n),
+                          ),
+                          const SizedBox(height: 14),
+
                           ElevatedButton.icon(
                             onPressed: _loading ? null : () => _createRoom(twoDice: false),
                             icon: const Icon(Icons.add_circle_outline_rounded, size: 17),
@@ -167,7 +191,14 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                                         foregroundColor: Colors.white54),
                                   ),
                                   const SizedBox(height: 4),
-                                  const _WaitingIndicator(),
+                                  // FEATURE (online player count): shows the
+                                  // live joined count against the target the
+                                  // creator picked. gs.numPlayers is kept in
+                                  // sync by _pollRoom() as people join.
+                                  _WaitingIndicator(
+                                    joined: gs.numPlayers,
+                                    target: _numPlayers,
+                                  ),
                                 ],
                               ),
                             ),
@@ -260,8 +291,103 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+// FEATURE (online player count): same visual pattern as the Local Play
+// 2P/3P/4P pills — a row of three equal, tappable, rounded chips, the
+// selected one filled and the others dimmed. Colors approximate the
+// blue/teal/indigo used on Local Play; swap in your exact AppColors
+// tokens here if Local Play's picker exposes them as constants.
+class _PlayerCountPicker extends StatelessWidget {
+  final int value;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+
+  const _PlayerCountPicker({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  static const _options = <int, Color>{
+    2: Color(0xFF2D82D9), // blue
+    3: Color(0xFF0F9D77), // teal/green
+    4: Color(0xFF4C4FCE), // indigo
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (final entry in _options.entries) ...[
+          if (entry.key != _options.keys.first) const SizedBox(width: 10),
+          Expanded(
+            child: _PlayerCountChip(
+              label: '${entry.key}P',
+              color: entry.value,
+              selected: value == entry.key,
+              enabled: enabled,
+              onTap: () => onChanged(entry.key),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PlayerCountChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _PlayerCountChip({
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.5,
+      child: Material(
+        color: selected ? color : color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? color : color.withOpacity(0.4),
+                width: selected ? 0 : 1,
+              ),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _WaitingIndicator extends StatelessWidget {
-  const _WaitingIndicator();
+  final int joined;
+  final int target;
+  const _WaitingIndicator({required this.joined, required this.target});
 
   @override
   Widget build(BuildContext context) {
@@ -274,7 +400,7 @@ class _WaitingIndicator extends StatelessWidget {
               strokeWidth: 2, color: AppColors.violetLit),
         ),
         const SizedBox(width: 8),
-        Text('Waiting for players…',
+        Text('Waiting for players… ($joined/$target)',
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium

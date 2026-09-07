@@ -1,4 +1,5 @@
 // lib/core/board_logic.dart
+import 'dart:math';
 import 'constants.dart';
 
 int pathIndex(int player, List<int> pos) {
@@ -69,8 +70,26 @@ List<int> calcNewPos(
 bool allHome(List<List<int>> tokens) =>
     tokens.every((p) => p[0] == kFinalHome[0] && p[1] == kFinalHome[1]);
 
+// FIX (Elo expected-score bug): this used to be
+// `1 / (1 + (10 * ((rb - ra) / 400)).toDouble().abs().clamp(0, 1e9))` —
+// two separate problems. First, it multiplied by 10 instead of raising 10
+// to the power of the rating-gap ratio, so the curve was linear instead
+// of the logistic curve Elo is built on. Second, `.abs()` discarded the
+// SIGN of (rb - ra) entirely, which means the expected score depended
+// only on the *size* of the rating gap, not on who was actually favored —
+// being far above your opponent's rating computed the exact same `ea` as
+// being far below it by the same margin. That silently broke every
+// rating update in every mode that calls this (vsBot win/loss, and the
+// local/online multiplayer win/loss branches in game_notifier.dart),
+// since a huge favorite winning and a huge underdog winning were treated
+// as equally "expected."
+// Standard Elo: ea = 1 / (1 + 10^((rb - ra) / 400)) — exponential, and
+// the sign of (rb - ra) must be preserved so a higher `ra` correctly
+// yields a smaller `ea` for opponent-relative-to-self framing here (ra
+// is "my" rating, rb is the opponent's; the higher ra is versus rb, the
+// closer ea should be to 1 for "the outcome I'm expected to get").
 int newElo(int ra, int rb, {required bool won}) {
-  final ea = 1 / (1 + (10 * ((rb - ra) / 400)).toDouble().abs().clamp(0, 1e9));
+  final ea = 1 / (1 + pow(10, (rb - ra) / 400));
   return (ra + kEloK * ((won ? 1 : 0) - ea)).round();
 }
 

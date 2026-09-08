@@ -38,6 +38,24 @@ class _ColourPickerScreenState extends ConsumerState<ColourPickerScreen> {
   static const _names  = ['Red', 'Green', 'Yellow', 'Blue'];
   static const _emojis = ['🔴', '🟢', '🟡', '🔵'];
 
+  // FIX (local play colour bug): setupGame() in game_notifier.dart only
+  // ever builds player slots 0..numPlayers-1 for local multiplayer
+  // (`final n = mode == GameMode.vsBot ? 4 : numPlayers;`) — vsBot always
+  // gets all 4 seats regardless of numPlayers, and online's colour
+  // availability is decided server-side later in joinRoom/createRoom, not
+  // here. So this screen was offering all 4 colours unconditionally, and
+  // picking one outside 0..numPlayers-1 in a LOCAL game (e.g. Yellow in a
+  // 2P game) got silently dropped: setupGame's `for (i in 0..<n)` loop
+  // never reached that index, so no slot was ever named 'You' and that
+  // colour's tokens were never created — the board just showed the two
+  // colours that do exist under generic "Player…" labels. Restricting the
+  // grid to the colours that will actually exist fixes it at the source
+  // instead of letting an invalid pick be made at all.
+  int get _maxColours =>
+      widget.mode == GameMode.localMultiplayer
+          ? widget.numPlayers.clamp(2, 4)
+          : 4;
+
   void _proceed() {
     if (_selected == null) {
       showSnack(context, 'Pick a colour first!',
@@ -67,6 +85,8 @@ class _ColourPickerScreenState extends ConsumerState<ColourPickerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final maxColours = _maxColours;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -87,9 +107,23 @@ class _ColourPickerScreenState extends ConsumerState<ColourPickerScreen> {
                             color: Colors.white60, height: 1.5),
                       textAlign: TextAlign.center,
                     ),
+                    // FIX (local play colour bug): tells the player why
+                    // fewer than 4 tiles show up, instead of the colours
+                    // just silently not being there.
+                    if (maxColours < 4) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'This is a ${widget.numPlayers}-player local game, '
+                        'so only ${maxColours == 2 ? "2 colours are" : "$maxColours colours are"} available.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white38),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                     const SizedBox(height: 32),
 
-                    // 2×2 colour grid
+                    // 2×2 colour grid — only as many tiles as can actually
+                    // exist in this game (see _maxColours above).
                     GridView.count(
                       crossAxisCount: 2,
                       shrinkWrap: true,
@@ -97,7 +131,7 @@ class _ColourPickerScreenState extends ConsumerState<ColourPickerScreen> {
                       crossAxisSpacing: 16,
                       mainAxisSpacing:  16,
                       childAspectRatio: 1.1,
-                      children: List.generate(4, (i) {
+                      children: List.generate(maxColours, (i) {
                         final sel = _selected == i;
                         final color = kPlayerColors[i];
                         return GestureDetector(

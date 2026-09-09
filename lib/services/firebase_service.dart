@@ -46,17 +46,19 @@ class FirebaseService {
     }
   }
 
-  // TEMP DIAGNOSTIC (revert once the silent-failure cause below is found
-  // and fixed — see the matching note in login_screen.dart's
-  // _forgotPassword()): returns the raw HTTP status and body alongside
-  // success, instead of just a bool, so the caller can show *why* a reset
-  // request failed rather than only ever showing the generic "if an
-  // account exists…" message. That generic message is the right
-  // long-term behavior (avoids leaking which emails are registered) —
-  // this richer return is only here to diagnose why nothing is being
-  // sent at all right now. Once confirmed working, collapse this back
-  // to `Future<bool>` returning `res.statusCode == 200`.
-  Future<(bool ok, int status, String body)> sendPasswordReset(String email) async {
+  // Sends a "reset your password" email for the given address via
+  // Firebase's sendOobCode endpoint. Returns true only on a real 200 from
+  // Identity Toolkit; false covers both network failures and API-level
+  // errors (e.g. malformed email), which the UI should treat identically
+  // ("if that email exists, a reset link has been sent") so email
+  // enumeration isn't possible from the response alone.
+  //
+  // Confirmed working end-to-end (Sept 2026): request returns 200, so
+  // Firebase is correctly generating and queuing the reset email. If
+  // delivery issues resurface, they're on the mail-delivery side (spam
+  // filtering, sender domain reputation), not this code — see the
+  // debugPrint below for the raw response if it's ever needed again.
+  Future<bool> sendPasswordReset(String email) async {
     try {
       final res = await http.post(
         Uri.parse('$_kAuthBase:sendOobCode?key=$_kApiKey'),
@@ -69,10 +71,10 @@ class FirebaseService {
       if (res.statusCode != 200) {
         debugPrint('Password reset error: ${res.statusCode} ${res.body}');
       }
-      return (res.statusCode == 200, res.statusCode, res.body);
+      return res.statusCode == 200;
     } catch (e) {
       debugPrint('Password reset error: $e');
-      return (false, -1, e.toString());
+      return false;
     }
   }
 

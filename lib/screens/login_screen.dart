@@ -110,17 +110,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // "Forgot password?" flow. Pre-fills whatever the user already typed
   // into the email field (if anything), lets them confirm/edit it, then
-  // calls FirebaseService.sendPasswordReset.
+  // calls FirebaseService.sendPasswordReset. The confirmation message is
+  // intentionally the same whether or not the email exists in the
+  // system, so this can't be used to probe registered emails.
   //
-  // TEMP DIAGNOSTIC: the long-term/correct behavior is to always show
-  // the SAME message regardless of success/failure/email-exists (see
-  // the commented-out line below _showResetResult), so this can't be
-  // used to probe which emails are registered. Right now, while reset
-  // emails aren't arriving at all, this instead shows the real HTTP
-  // status/body from Identity Toolkit so the actual cause is visible
-  // directly on-device — no laptop/terminal needed. Once the cause is
-  // found and fixed, delete the diagnostic branch and restore the
-  // single generic showSnack call.
+  // Confirmed working end-to-end (Sept 2026) via a temporary diagnostic
+  // build: the request returns 200 and Firebase queues the email
+  // correctly. Any future non-delivery reports are a mail-delivery
+  // question (spam filtering, sender domain), not an app bug.
   Future<void> _forgotPassword() async {
     final ctrl = TextEditingController(text: _emailCtrl.text.trim());
     final email = await showDialog<String>(
@@ -166,39 +163,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (email == null || email.isEmpty) return;
 
     setState(() => _loading = true);
-    (bool, int, String)? result;
     try {
       final fb = ref.read(firebaseServiceProvider);
-      result = await fb.sendPasswordReset(email);
+      await fb.sendPasswordReset(email);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
 
     if (!mounted) return;
-
-    // TEMP DIAGNOSTIC — shows exactly what Identity Toolkit said instead
-    // of the privacy-preserving generic message. Revert to the single
-    // line below once reset emails are confirmed arriving.
-    if (result != null && result.$1) {
-      showSnack(
-        context,
-        'If an account exists for that email, a reset link has been sent.',
-      );
-    } else {
-      showSnack(
-        context,
-        'Reset failed — HTTP ${result?.$2 ?? '?'}: ${result?.$3 ?? 'unknown error'}',
-        color: Colors.red.shade700,
-      );
-    }
-    // Original/production behavior — same message regardless of success,
-    // failure, or whether the email exists, so this can't be used to
-    // probe registered emails. Restore this (and delete the branch
-    // above) once the send failure is diagnosed and fixed:
-    // showSnack(
-    //   context,
-    //   'If an account exists for that email, a reset link has been sent.',
-    // );
+    // Same message regardless of success/failure/email-exists — avoids
+    // leaking which emails are registered, and a network hiccup here
+    // shouldn't read as "that email is wrong."
+    showSnack(
+      context,
+      'If an account exists for that email, a reset link has been sent.',
+    );
   }
 
   @override

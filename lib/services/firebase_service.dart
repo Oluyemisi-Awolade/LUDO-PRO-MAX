@@ -46,18 +46,12 @@ class FirebaseService {
     }
   }
 
-  // Sends a "reset your password" email for the given address via
+  // NEW: sends a "reset your password" email for the given address via
   // Firebase's sendOobCode endpoint. Returns true only on a real 200 from
   // Identity Toolkit; false covers both network failures and API-level
   // errors (e.g. malformed email), which the UI should treat identically
   // ("if that email exists, a reset link has been sent") so email
   // enumeration isn't possible from the response alone.
-  //
-  // Confirmed working end-to-end (Sept 2026): request returns 200, so
-  // Firebase is correctly generating and queuing the reset email. If
-  // delivery issues resurface, they're on the mail-delivery side (spam
-  // filtering, sender domain reputation), not this code — see the
-  // debugPrint below for the raw response if it's ever needed again.
   Future<bool> sendPasswordReset(String email) async {
     try {
       final res = await http.post(

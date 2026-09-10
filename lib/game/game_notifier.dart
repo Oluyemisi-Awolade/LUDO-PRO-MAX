@@ -154,6 +154,24 @@ class GameNotifier extends StateNotifier<GameState> {
   Future<void> rollDice() async {
     if (_moveLock) return;
 
+    // FIX (online roll/poll race — turn skipped before it could be
+    // played): every other place that mutates online state (_doMove,
+    // _advanceTurn) bumps _localMoveSeq before its first await, so a
+    // poll GET already in flight at that moment is recognized as stale
+    // and discarded when it returns (see _pollRoom). rollDice() was the
+    // one place that never did this. Its own `await _syncRoom();` below
+    // yields control back to the event loop, and the periodic poll timer
+    // keeps firing independently of that — so a poll response could land
+    // in that window and overwrite the just-rolled dice1/dice2 back to
+    // their pre-roll (usually 0) values. The legal-move check right
+    // after gates on `state.dice1 > 0`/`state.dice2 > 0` (not the local
+    // d1/d2 variables), so a zeroed-out state.dice1/dice2 made it look
+    // like there was no legal move — even when there genuinely was one —
+    // and immediately forfeited the turn to the next player. No effect
+    // on local/vsBot: _localMoveSeq is only ever read/used by the online
+    // poll/sync path.
+    if (state.mode == GameMode.online) _localMoveSeq++;
+
     final d1 = _rng.nextInt(6) + 1;
     final d2 = state.twoDiceMode ? _rng.nextInt(6) + 1 : 0;
     await _audio.play('dice');
